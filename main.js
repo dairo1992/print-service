@@ -314,19 +314,33 @@ function log(level, message) {
 
 async function fetchAndProcessJobs() {
     const config = store.get('config');
-    if (!config) return;
+    if (!config) {
+        log('WARN', 'No hay configuración guardada, saltando polling');
+        return;
+    }
+
+    const url = `${config.apiUrl}?action=pending`;
+    log('INFO', `[POLLING] GET ${url}`);
+    log('INFO', `[POLLING] Headers: X-Client-Id=${config.clientId}`);
 
     try {
         // Consultar servidor por trabajos pendientes
-        const response = await axios.get(`${config.apiUrl}?action=pending`, {
+        const response = await axios.get(url, {
             headers: {
-                //'Authorization': `Bearer ${config.token}`,
                 'X-Client-Id': config.clientId
             },
             timeout: 10000
         });
 
-        const jobs = response.data.jobs || [];
+        // Log de la respuesta
+        log('INFO', `[POLLING] Respuesta status: ${response.status}`);
+        log('INFO', `[POLLING] Respuesta data: ${JSON.stringify(response.data)}`);
+
+        // Aceptar tanto 'jobs' como 'pendientes' del API
+        const jobs = response.data.jobs || response.data.pendientes || [];
+
+        // Guardar trabajos localmente para la UI
+        store.set('jobs', jobs);
 
         // Connection successful - reset backoff
         adjustPollingInterval(true);
@@ -348,10 +362,23 @@ async function fetchAndProcessJobs() {
             for (const job of jobs) {
                 await processJob(job);
             }
+        } else {
+            log('INFO', '[POLLING] No hay trabajos pendientes');
+            // Notificar lista vacía al renderer
+            if (mainWindow && mainWindow.webContents) {
+                mainWindow.webContents.send('jobs-update', []);
+            }
         }
     } catch (error) {
         // Apply exponential backoff
         adjustPollingInterval(false);
+
+        log('ERROR', `[POLLING] Error: ${error.message}`);
+        
+        if (error.response) {
+            log('ERROR', `[POLLING] Response status: ${error.response.status}`);
+            log('ERROR', `[POLLING] Response data: ${JSON.stringify(error.response.data)}`);
+        }
 
         if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
             log('ERROR', `No se pudo conectar al servidor: ${error.code}`);
@@ -375,9 +402,12 @@ async function fetchAndProcessJobs() {
 // ============================================================
 async function processJob(job) {
     const config = store.get('config');
+    
+    // Normalizar el tipo de documento (soportar 'type' o 'document_type')
+    const jobType = job.type || job.document_type;
 
     try {
-        console.log(`Procesando trabajo ${job.id} (${job.type})`);
+        log('INFO', `Procesando trabajo ${job.id} (${jobType})`);
 
         // Notificar inicio de procesamiento
         await notifyServer(job.id, 'processing');
@@ -390,6 +420,7 @@ async function processJob(job) {
         }
 
         // 1. Obtener HTML del servidor
+        log('INFO', `[RENDER] GET ${config.apiUrl}?action=render&id=${job.id}`);
         const htmlResponse = await axios.get(
             `${config.apiUrl}?action=render&id=${job.id}`,
             {
@@ -401,15 +432,16 @@ async function processJob(job) {
         );
 
         const htmlContent = htmlResponse.data;
+        log('INFO', `[RENDER] HTML recibido: ${htmlContent.length} caracteres`);
 
         // 2. Renderizar a PDF
         const pdfBuffer = await renderHTMLToPDF(htmlContent, job);
 
         // 3. Seleccionar impresora
-        const printerName = selectPrinter(job.type, config.printerMappings);
+        const printerName = selectPrinter(jobType, config.printerMappings);
 
         if (!printerName) {
-            throw new Error(`No hay impresora configurada para tipo: ${job.type}`);
+            throw new Error(`No hay impresora configurada para tipo: ${jobType}`);
         }
 
         // 4. Imprimir
@@ -524,24 +556,32 @@ async function printPDF(pdfBuffer, printerName, job) {
 async function notifyServer(jobId, status, details = {}) {
     const config = store.get('config');
 
+    const url = `${config.apiUrl}?action=status`;
+    const payload = {
+        job_id: jobId,
+        status: status,
+        client_id: config.clientId,
+        details: details
+    };
+
+    log('INFO', `[STATUS] POST ${url}`);
+    log('INFO', `[STATUS] Payload: ${JSON.stringify(payload)}`);
+
     try {
-        await axios.post(
-            `${config.apiUrl}?action=status`,
-            {
-                job_id: jobId,
-                status: status,
-                client_id: config.clientId,
-                details: details
+        const response = await axios.post(url, payload, {
+            headers: {
+                'Authorization': `Bearer ${config.token}`,
+                'Content-Type': 'application/json'
             },
-            {
-                headers: {
-                    'Authorization': `Bearer ${config.token}`
-                },
-                timeout: 5000
-            }
-        );
+            timeout: 5000
+        });
+
+        log('INFO', `[STATUS] Respuesta: ${response.status} - ${JSON.stringify(response.data)}`);
     } catch (error) {
-        console.error('Error notificando al servidor:', error.message);
+        log('ERROR', `[STATUS] Error notificando al servidor: ${error.message}`);
+        if (error.response) {
+            log('ERROR', `[STATUS] Response: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+        }
     }
 }
 

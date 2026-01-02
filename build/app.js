@@ -532,10 +532,12 @@ function renderJobList(container, jobs) {
         return;
     }
 
-    container.innerHTML = jobs.map(job => `
+    container.innerHTML = jobs.map(job => {
+        const jobType = job.type || job.document_type || 'default';
+        return `
         <div class="job-item" data-job-id="${job.id}">
             <span class="job-id">#${job.id}</span>
-            <span class="job-type">${getDocumentTypeLabel(job.type)}</span>
+            <span class="job-type">${getDocumentTypeLabel(jobType)}</span>
             <span class="job-printer">${escapeHtml(job.printer || 'Sin asignar')}</span>
             <span class="job-status ${job.status}">
                 ${getStatusIcon(job.status)} ${getStatusLabel(job.status)}
@@ -548,7 +550,8 @@ function renderJobList(container, jobs) {
                 ` : ''}
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 function updateJobStatus(data) {
