@@ -201,16 +201,19 @@ async function handleConfigSubmit(event) {
         const result = await window.electronAPI.saveConfig(config);
 
         if (result.success) {
-            state.config = { ...config, ...result.data };
+            // Store config with printer_mappings from server response
+            state.config = { 
+                ...config, 
+                printerMappings: result.data.printer_mappings || {},
+                token: result.data.token 
+            };
             updateConfigStatus(true);
             updateConnectionStatus(true);
             showToast('Configuración guardada correctamente', 'success');
 
-            // Render dynamic printer mappings from server response
-            renderPrinterMappingUI();
-            
-            // Reload printers after config is saved
+            // First load printers, then render mappings
             await loadPrinters();
+            renderPrinterMappingUI();
         } else {
             showToast(result.error || 'Error al guardar la configuración', 'error');
         }

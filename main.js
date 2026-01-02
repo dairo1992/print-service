@@ -177,8 +177,15 @@ ipcMain.handle('save-config', async (event, config) => {
                 printerMappings: response.data.printer_mappings || {}
             });
 
-            // Inicializar sistema de impresión
-            await initializePrintSystem();
+            // Inicializar sistema de impresión (no bloqueante)
+            initializePrintSystem().catch(err => {
+                log('ERROR', `Error inicializando sistema de impresión: ${err.message}`);
+                if (mainWindow && mainWindow.webContents) {
+                    mainWindow.webContents.send('print-system-error', {
+                        message: 'Error al inicializar el sistema de impresión. Ejecuta: npx puppeteer browsers install chrome'
+                    });
+                }
+            });
 
             return { success: true, data: response.data };
         } else {
@@ -188,7 +195,7 @@ ipcMain.handle('save-config', async (event, config) => {
         console.error('Error al validar configuración:', error);
         return {
             success: false,
-            error: error.response?.data?.message || 'Error al conectar con el servidor'
+            error: error.response?.data?.message || error.message || 'Error al conectar con el servidor'
         };
     }
 });
@@ -311,10 +318,10 @@ async function fetchAndProcessJobs() {
 
     try {
         // Consultar servidor por trabajos pendientes
-        const response = await axios.get(`${config.apiUrl}/api/print/pending`, {
+        const response = await axios.get(`${config.apiUrl}?action=pending`, {
             headers: {
-                'Authorization': `Bearer ${config.token}`,
-                'X-Client-ID': config.clientId
+                //'Authorization': `Bearer ${config.token}`,
+                'X-Client-Id': config.clientId
             },
             timeout: 10000
         });
@@ -384,7 +391,7 @@ async function processJob(job) {
 
         // 1. Obtener HTML del servidor
         const htmlResponse = await axios.get(
-            `${config.apiUrl}/api/print/render/${job.id}`,
+            `${config.apiUrl}?action=render&id=${job.id}`,
             {
                 headers: {
                     'Authorization': `Bearer ${config.token}`
@@ -519,7 +526,7 @@ async function notifyServer(jobId, status, details = {}) {
 
     try {
         await axios.post(
-            `${config.apiUrl}/api/print/status`,
+            `${config.apiUrl}?action=status`,
             {
                 job_id: jobId,
                 status: status,
