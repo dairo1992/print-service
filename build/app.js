@@ -1,0 +1,602 @@
+// ============================================================
+// PrintStation - Dashboard Application
+// ============================================================
+
+// State Management
+const state = {
+    config: null,
+    printers: [],
+    jobs: [],
+    stats: {
+        pending: 0,
+        processing: 0,
+        completed: 0,
+        failed: 0
+    },
+    isConnected: false
+};
+
+// ============================================================
+// DOM Elements
+// ============================================================
+const elements = {
+    // Navigation
+    navItems: document.querySelectorAll('.nav-item'),
+    contentSections: document.querySelectorAll('.content-section'),
+
+    // Connection Status
+    statusIndicator: document.getElementById('statusIndicator'),
+    statusText: document.getElementById('statusText'),
+    configStatus: document.getElementById('configStatus'),
+
+    // Stats
+    statPending: document.getElementById('stat-pending'),
+    statProcessing: document.getElementById('stat-processing'),
+    statCompleted: document.getElementById('stat-completed'),
+    statFailed: document.getElementById('stat-failed'),
+
+    // Jobs
+    recentJobsList: document.getElementById('recentJobsList'),
+    allJobsList: document.getElementById('allJobsList'),
+    refreshJobsBtn: document.getElementById('refreshJobsBtn'),
+
+    // Printers
+    printersList: document.getElementById('printersList'),
+    refreshPrintersBtn: document.getElementById('refreshPrintersBtn'),
+    saveMappingsBtn: document.getElementById('saveMappingsBtn'),
+
+    // Config Form
+    configForm: document.getElementById('configForm'),
+    clientIdInput: document.getElementById('clientId'),
+    apiUrlInput: document.getElementById('apiUrl'),
+    apiKeyInput: document.getElementById('apiKey'),
+    saveConfigBtn: document.getElementById('saveConfigBtn'),
+    testConnectionBtn: document.getElementById('testConnectionBtn'),
+
+    // Toast
+    toastContainer: document.getElementById('toastContainer')
+};
+
+// ============================================================
+// Initialization
+// ============================================================
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🖨️ PrintStation Dashboard Initialized');
+
+    // Setup navigation
+    setupNavigation();
+
+    // Setup event listeners
+    setupEventListeners();
+
+    // Load initial data
+    await loadConfig();
+    await loadPrinters();
+    await loadStats();
+    await loadJobs();
+
+    // Setup IPC listeners
+    setupIPCListeners();
+});
+
+// ============================================================
+// Navigation
+// ============================================================
+function setupNavigation() {
+    elements.navItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const sectionId = item.dataset.section;
+
+            // Update active nav item
+            elements.navItems.forEach(nav => nav.classList.remove('active'));
+            item.classList.add('active');
+
+            // Show corresponding section
+            elements.contentSections.forEach(section => {
+                section.classList.remove('active');
+            });
+            document.getElementById(`section-${sectionId}`).classList.add('active');
+        });
+    });
+}
+
+// ============================================================
+// Event Listeners
+// ============================================================
+function setupEventListeners() {
+    // Config Form
+    elements.configForm.addEventListener('submit', handleConfigSubmit);
+    elements.testConnectionBtn.addEventListener('click', handleTestConnection);
+
+    // Printers
+    elements.refreshPrintersBtn.addEventListener('click', loadPrinters);
+    elements.saveMappingsBtn.addEventListener('click', handleSaveMappings);
+
+    // Jobs
+    elements.refreshJobsBtn.addEventListener('click', loadJobs);
+}
+
+// ============================================================
+// IPC Listeners (from main process)
+// ============================================================
+function setupIPCListeners() {
+    if (!window.electronAPI) {
+        console.warn('electronAPI not available - running in browser mode');
+        return;
+    }
+
+    // Jobs update
+    window.electronAPI.onJobsUpdate((jobs) => {
+        console.log('Jobs updated:', jobs.length);
+        state.jobs = jobs;
+        renderJobs();
+        updateStats();
+    });
+
+    // Job status update
+    window.electronAPI.onJobStatus((data) => {
+        console.log('Job status:', data);
+        updateJobStatus(data);
+    });
+
+    // Connection status
+    window.electronAPI.onConnectionStatus((isConnected) => {
+        updateConnectionStatus(isConnected);
+    });
+}
+
+// ============================================================
+// Configuration
+// ============================================================
+async function loadConfig() {
+    try {
+        if (!window.electronAPI) return;
+
+        const config = await window.electronAPI.getConfig();
+        state.config = config;
+
+        if (config) {
+            elements.clientIdInput.value = config.clientId || '';
+            elements.apiUrlInput.value = config.apiUrl || '';
+            elements.apiKeyInput.value = config.apiKey || '';
+
+            updateConfigStatus(true);
+            updateConnectionStatus(true);
+        } else {
+            updateConfigStatus(false);
+            updateConnectionStatus(false);
+        }
+    } catch (error) {
+        console.error('Error loading config:', error);
+        showToast('Error al cargar la configuración', 'error');
+    }
+}
+
+async function handleConfigSubmit(event) {
+    event.preventDefault();
+
+    const config = {
+        clientId: elements.clientIdInput.value.trim(),
+        apiUrl: elements.apiUrlInput.value.trim(),
+        apiKey: elements.apiKeyInput.value.trim()
+    };
+
+    if (!config.clientId || !config.apiUrl || !config.apiKey) {
+        showToast('Por favor, completa todos los campos', 'warning');
+        return;
+    }
+
+    elements.saveConfigBtn.disabled = true;
+    elements.saveConfigBtn.innerHTML = '<span class="loading-spinner"></span> Guardando...';
+
+    try {
+        if (!window.electronAPI) {
+            showToast('API no disponible', 'error');
+            return;
+        }
+
+        const result = await window.electronAPI.saveConfig(config);
+
+        if (result.success) {
+            state.config = config;
+            updateConfigStatus(true);
+            updateConnectionStatus(true);
+            showToast('Configuración guardada correctamente', 'success');
+
+            // Reload printers after config is saved
+            await loadPrinters();
+        } else {
+            showToast(result.error || 'Error al guardar la configuración', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving config:', error);
+        showToast('Error al guardar la configuración', 'error');
+    } finally {
+        elements.saveConfigBtn.disabled = false;
+        elements.saveConfigBtn.innerHTML = '💾 Guardar Configuración';
+    }
+}
+
+async function handleTestConnection() {
+    showToast('Probando conexión...', 'info');
+
+    try {
+        if (!window.electronAPI) {
+            showToast('API no disponible', 'error');
+            return;
+        }
+
+        const config = await window.electronAPI.getConfig();
+
+        if (config && config.token) {
+            showToast('Conexión exitosa!', 'success');
+            updateConnectionStatus(true);
+        } else {
+            showToast('No hay configuración guardada', 'warning');
+            updateConnectionStatus(false);
+        }
+    } catch (error) {
+        console.error('Error testing connection:', error);
+        showToast('Error al probar la conexión', 'error');
+        updateConnectionStatus(false);
+    }
+}
+
+function updateConfigStatus(isConfigured) {
+    if (isConfigured) {
+        elements.configStatus.className = 'config-status configured';
+        elements.configStatus.textContent = 'Configurado';
+    } else {
+        elements.configStatus.className = 'config-status not-configured';
+        elements.configStatus.textContent = 'No Configurado';
+    }
+}
+
+function updateConnectionStatus(isConnected) {
+    state.isConnected = isConnected;
+
+    if (isConnected) {
+        elements.statusIndicator.className = 'status-indicator connected';
+        elements.statusText.textContent = 'Conectado';
+    } else {
+        elements.statusIndicator.className = 'status-indicator disconnected';
+        elements.statusText.textContent = 'Desconectado';
+    }
+}
+
+// ============================================================
+// Printers
+// ============================================================
+async function loadPrinters() {
+    try {
+        if (!window.electronAPI) return;
+
+        const printers = await window.electronAPI.getPrinters();
+        state.printers = printers;
+
+        renderPrintersList();
+        updatePrinterSelects();
+        loadPrinterMappings();
+    } catch (error) {
+        console.error('Error loading printers:', error);
+        showToast('Error al cargar impresoras', 'error');
+    }
+}
+
+function renderPrintersList() {
+    if (state.printers.length === 0) {
+        elements.printersList.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🚫</div>
+                <p>No se detectaron impresoras</p>
+            </div>
+        `;
+        return;
+    }
+
+    elements.printersList.innerHTML = state.printers.map(printer => `
+        <div class="printer-mapping-item">
+            <div class="printer-type-label">
+                <span class="printer-type-icon">${printer.isDefault ? '⭐' : '🖨️'}</span>
+                ${escapeHtml(printer.name)}
+            </div>
+            <span class="job-status ${printer.status === 'ready' ? 'completed' : 'pending'}">
+                ${printer.status === 'ready' ? '✓ Listo' : '○ ' + printer.status}
+            </span>
+        </div>
+    `).join('');
+}
+
+function updatePrinterSelects() {
+    const selects = document.querySelectorAll('.printer-mapping-grid select');
+    const options = state.printers.map(p =>
+        `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}</option>`
+    ).join('');
+
+    selects.forEach(select => {
+        const currentValue = select.value;
+        select.innerHTML = `<option value="">-- Seleccionar --</option>${options}`;
+        select.value = currentValue;
+    });
+}
+
+function loadPrinterMappings() {
+    if (!state.config || !state.config.printerMappings) return;
+
+    const mappings = state.config.printerMappings;
+
+    Object.keys(mappings).forEach(type => {
+        const select = document.getElementById(`mapping-${type}`);
+        if (select) {
+            select.value = mappings[type] || '';
+        }
+    });
+}
+
+async function handleSaveMappings() {
+    const mappings = {};
+    const selects = document.querySelectorAll('.printer-mapping-grid select');
+
+    selects.forEach(select => {
+        const type = select.dataset.type;
+        mappings[type] = select.value;
+    });
+
+    try {
+        if (!window.electronAPI) {
+            showToast('API no disponible', 'error');
+            return;
+        }
+
+        const result = await window.electronAPI.updatePrinterMapping(mappings);
+
+        if (result.success) {
+            if (state.config) {
+                state.config.printerMappings = mappings;
+            }
+            showToast('Mapeo de impresoras guardado', 'success');
+        } else {
+            showToast('Error al guardar el mapeo', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving mappings:', error);
+        showToast('Error al guardar el mapeo', 'error');
+    }
+}
+
+// ============================================================
+// Statistics
+// ============================================================
+async function loadStats() {
+    try {
+        if (!window.electronAPI) return;
+
+        const stats = await window.electronAPI.getStats();
+        state.stats = stats;
+        updateStatsDisplay();
+    } catch (error) {
+        console.error('Error loading stats:', error);
+    }
+}
+
+function updateStats() {
+    const stats = {
+        pending: 0,
+        processing: 0,
+        completed: 0,
+        failed: 0
+    };
+
+    state.jobs.forEach(job => {
+        if (stats.hasOwnProperty(job.status)) {
+            stats[job.status]++;
+        }
+    });
+
+    state.stats = stats;
+    updateStatsDisplay();
+}
+
+function updateStatsDisplay() {
+    animateValue(elements.statPending, state.stats.pending);
+    animateValue(elements.statProcessing, state.stats.processing);
+    animateValue(elements.statCompleted, state.stats.completed);
+    animateValue(elements.statFailed, state.stats.failed);
+}
+
+function animateValue(element, newValue) {
+    const currentValue = parseInt(element.textContent) || 0;
+
+    if (currentValue === newValue) return;
+
+    const duration = 300;
+    const steps = 10;
+    const stepDuration = duration / steps;
+    const stepValue = (newValue - currentValue) / steps;
+
+    let current = currentValue;
+    let step = 0;
+
+    const interval = setInterval(() => {
+        step++;
+        current += stepValue;
+        element.textContent = Math.round(current);
+
+        if (step >= steps) {
+            clearInterval(interval);
+            element.textContent = newValue;
+        }
+    }, stepDuration);
+}
+
+// ============================================================
+// Jobs
+// ============================================================
+async function loadJobs() {
+    try {
+        if (!window.electronAPI) return;
+
+        const jobs = await window.electronAPI.getJobs();
+        state.jobs = jobs;
+        renderJobs();
+        updateStats();
+    } catch (error) {
+        console.error('Error loading jobs:', error);
+    }
+}
+
+function renderJobs() {
+    renderJobList(elements.recentJobsList, state.jobs.slice(0, 5));
+    renderJobList(elements.allJobsList, state.jobs);
+}
+
+function renderJobList(container, jobs) {
+    if (jobs.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">📭</div>
+                <p>No hay trabajos en la cola</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = jobs.map(job => `
+        <div class="job-item" data-job-id="${job.id}">
+            <span class="job-id">#${job.id}</span>
+            <span class="job-type">${getDocumentTypeLabel(job.type)}</span>
+            <span class="job-printer">${escapeHtml(job.printer || 'Sin asignar')}</span>
+            <span class="job-status ${job.status}">
+                ${getStatusIcon(job.status)} ${getStatusLabel(job.status)}
+            </span>
+            <div class="job-actions">
+                ${job.status === 'failed' ? `
+                    <button class="btn-icon" onclick="retryJob('${job.id}')" title="Reintentar">
+                        🔄
+                    </button>
+                ` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+function updateJobStatus(data) {
+    const jobElement = document.querySelector(`[data-job-id="${data.id}"]`);
+
+    if (jobElement) {
+        const statusElement = jobElement.querySelector('.job-status');
+        statusElement.className = `job-status ${data.status}`;
+        statusElement.innerHTML = `${getStatusIcon(data.status)} ${getStatusLabel(data.status)}`;
+    }
+
+    // Update stats
+    const job = state.jobs.find(j => j.id === data.id);
+    if (job) {
+        job.status = data.status;
+        updateStats();
+    }
+}
+
+async function retryJob(jobId) {
+    try {
+        if (!window.electronAPI) {
+            showToast('API no disponible', 'error');
+            return;
+        }
+
+        showToast('Reintentando trabajo...', 'info');
+        const result = await window.electronAPI.retryJob(jobId);
+
+        if (result.success) {
+            showToast('Trabajo enviado a la cola', 'success');
+        } else {
+            showToast(result.error || 'Error al reintentar', 'error');
+        }
+    } catch (error) {
+        console.error('Error retrying job:', error);
+        showToast('Error al reintentar el trabajo', 'error');
+    }
+}
+
+// Make retryJob available globally for onclick
+window.retryJob = retryJob;
+
+// ============================================================
+// Helper Functions
+// ============================================================
+function getDocumentTypeLabel(type) {
+    const labels = {
+        invoice: '🧾 Factura',
+        label: '🏷️ Etiqueta',
+        report: '📊 Reporte',
+        default: '📄 Documento'
+    };
+    return labels[type] || labels.default;
+}
+
+function getStatusIcon(status) {
+    const icons = {
+        pending: '○',
+        processing: '◐',
+        completed: '✓',
+        failed: '✗'
+    };
+    return icons[status] || '○';
+}
+
+function getStatusLabel(status) {
+    const labels = {
+        pending: 'Pendiente',
+        processing: 'Procesando',
+        completed: 'Completado',
+        failed: 'Fallido'
+    };
+    return labels[status] || status;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// ============================================================
+// Toast Notifications
+// ============================================================
+function showToast(message, type = 'info') {
+    const icons = {
+        success: '✓',
+        error: '✗',
+        warning: '⚠',
+        info: 'ℹ'
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `
+        <span class="toast-icon">${icons[type]}</span>
+        <span class="toast-message">${escapeHtml(message)}</span>
+        <button class="toast-close" onclick="this.parentElement.remove()">✕</button>
+    `;
+
+    elements.toastContainer.appendChild(toast);
+
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.style.animation = 'slideIn 0.3s ease reverse';
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, 5000);
+}
+
+// ============================================================
+// Periodic Updates
+// ============================================================
+setInterval(async () => {
+    if (state.isConnected) {
+        await loadStats();
+        await loadJobs();
+    }
+}, 10000); // Update every 10 seconds

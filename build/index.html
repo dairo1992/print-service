@@ -1,12 +1,289 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 
 <head>
-    <title>PrintStation</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;">
+    <title>PrintStation - Sistema de Impresión</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
-    <h1>PrintStation is running</h1>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="app-logo">
+                <div class="app-logo-icon">🖨️</div>
+                <span class="app-logo-text">PrintStation</span>
+            </div>
+            <div class="connection-status" id="connectionStatus">
+                <span class="status-indicator disconnected" id="statusIndicator"></span>
+                <span id="statusText">Desconectado</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="app-main">
+            <!-- Sidebar -->
+            <nav class="sidebar">
+                <button class="nav-item active" data-section="dashboard">
+                    <span class="nav-item-icon">📊</span>
+                    <span>Dashboard</span>
+                </button>
+                <button class="nav-item" data-section="jobs">
+                    <span class="nav-item-icon">📋</span>
+                    <span>Cola de Trabajos</span>
+                </button>
+                <button class="nav-item" data-section="printers">
+                    <span class="nav-item-icon">🖨️</span>
+                    <span>Impresoras</span>
+                </button>
+                <button class="nav-item" data-section="config">
+                    <span class="nav-item-icon">⚙️</span>
+                    <span>Configuración</span>
+                </button>
+            </nav>
+
+            <!-- Content Area -->
+            <div class="content-area">
+                <!-- Dashboard Section -->
+                <section class="content-section active" id="section-dashboard">
+                    <div class="section-header">
+                        <h1 class="section-title">Dashboard</h1>
+                        <p class="section-subtitle">Resumen del estado de impresión</p>
+                    </div>
+
+                    <!-- Stats Grid -->
+                    <div class="stats-grid">
+                        <div class="stat-card pending">
+                            <div class="stat-label">Pendientes</div>
+                            <div class="stat-value" id="stat-pending">0</div>
+                        </div>
+                        <div class="stat-card processing">
+                            <div class="stat-label">Procesando</div>
+                            <div class="stat-value" id="stat-processing">0</div>
+                        </div>
+                        <div class="stat-card completed">
+                            <div class="stat-label">Completados</div>
+                            <div class="stat-value" id="stat-completed">0</div>
+                        </div>
+                        <div class="stat-card failed">
+                            <div class="stat-label">Fallidos</div>
+                            <div class="stat-value" id="stat-failed">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Jobs -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <span>📋</span> Trabajos Recientes
+                            </h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="job-list" id="recentJobsList">
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">📭</div>
+                                    <p>No hay trabajos recientes</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Jobs Section -->
+                <section class="content-section" id="section-jobs">
+                    <div class="section-header">
+                        <h1 class="section-title">Cola de Trabajos</h1>
+                        <p class="section-subtitle">Gestiona todos los trabajos de impresión</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <span>📋</span> Todos los Trabajos
+                            </h2>
+                            <button class="btn btn-secondary" id="refreshJobsBtn">
+                                🔄 Actualizar
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="job-list" id="allJobsList">
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">📭</div>
+                                    <p>No hay trabajos en la cola</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Printers Section -->
+                <section class="content-section" id="section-printers">
+                    <div class="section-header">
+                        <h1 class="section-title">Impresoras</h1>
+                        <p class="section-subtitle">Configura el mapeo de impresoras por tipo de documento</p>
+                    </div>
+
+                    <div class="two-column-grid">
+                        <!-- Available Printers -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="card-title">
+                                    <span>🖨️</span> Impresoras Detectadas
+                                </h2>
+                                <button class="btn btn-secondary" id="refreshPrintersBtn">
+                                    🔄 Actualizar
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div id="printersList">
+                                    <div class="empty-state">
+                                        <div class="empty-state-icon">🔍</div>
+                                        <p>Buscando impresoras...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Printer Mapping -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="card-title">
+                                    <span>🔗</span> Mapeo de Impresoras
+                                </h2>
+                            </div>
+                            <div class="card-body">
+                                <div class="printer-mapping-grid" id="printerMappingGrid">
+                                    <div class="printer-mapping-item">
+                                        <div class="printer-type-label">
+                                            <span class="printer-type-icon">🧾</span>
+                                            Facturas
+                                        </div>
+                                        <select class="form-select" id="mapping-invoice" data-type="invoice">
+                                            <option value="">-- Seleccionar --</option>
+                                        </select>
+                                    </div>
+                                    <div class="printer-mapping-item">
+                                        <div class="printer-type-label">
+                                            <span class="printer-type-icon">🏷️</span>
+                                            Etiquetas
+                                        </div>
+                                        <select class="form-select" id="mapping-label" data-type="label">
+                                            <option value="">-- Seleccionar --</option>
+                                        </select>
+                                    </div>
+                                    <div class="printer-mapping-item">
+                                        <div class="printer-type-label">
+                                            <span class="printer-type-icon">📊</span>
+                                            Reportes
+                                        </div>
+                                        <select class="form-select" id="mapping-report" data-type="report">
+                                            <option value="">-- Seleccionar --</option>
+                                        </select>
+                                    </div>
+                                    <div class="printer-mapping-item">
+                                        <div class="printer-type-label">
+                                            <span class="printer-type-icon">📄</span>
+                                            Por Defecto
+                                        </div>
+                                        <select class="form-select" id="mapping-default" data-type="default">
+                                            <option value="">-- Seleccionar --</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mt-lg">
+                                    <button class="btn btn-primary" id="saveMappingsBtn">
+                                        💾 Guardar Mapeo
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Config Section -->
+                <section class="content-section" id="section-config">
+                    <div class="section-header">
+                        <h1 class="section-title">Configuración</h1>
+                        <p class="section-subtitle">Configura la conexión con el servidor</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <span>🔐</span> Credenciales del Servidor
+                            </h2>
+                            <span class="config-status not-configured" id="configStatus">
+                                No Configurado
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <form id="configForm">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label" for="clientId">Client ID</label>
+                                        <input type="text" class="form-input" id="clientId" 
+                                               placeholder="Ej: ALMACEN-01" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="apiUrl">URL del Servidor</label>
+                                        <input type="url" class="form-input" id="apiUrl" 
+                                               placeholder="https://tu-servidor.com" required>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="apiKey">API Key</label>
+                                    <input type="password" class="form-input" id="apiKey" 
+                                           placeholder="Tu API Key secreta" required>
+                                </div>
+                                <div class="mt-lg">
+                                    <button type="submit" class="btn btn-primary" id="saveConfigBtn">
+                                        💾 Guardar Configuración
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" id="testConnectionBtn">
+                                        🔌 Probar Conexión
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- App Info -->
+                    <div class="card mt-lg">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <span>ℹ️</span> Información de la Aplicación
+                            </h2>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Versión:</strong> 1.0.0</p>
+                            <p><strong>Autor:</strong> Dairo Rafael Barrios Ramos</p>
+                            <p class="mt-md text-muted">
+                                Sistema de impresión distribuida para aplicaciones web.
+                                La aplicación se ejecuta en segundo plano y procesa automáticamente
+                                los trabajos de impresión pendientes.
+                            </p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Scripts -->
+    <script src="app.js"></script>
 </body>
 
 </html>

@@ -35,9 +35,9 @@
     "puppeteer": "^24.34.0"
   },
   "build": {
-    "appId": "com.tuempresa.printstation",
+    "appId": "com.printstation.app",
     "productName": "PrintStation",
-    "copyright": "Copyright © 2024 Tu Empresa",
+    "copyright": "Copyright © 2024 Dairo Rafael Barrios Ramos",
     "directories": {
       "output": "release",
       "buildResources": "assets"
@@ -76,7 +76,7 @@
       ],
       "icon": "assets/icon.ico",
       "requestedExecutionLevel": "asInvoker",
-      "publisherName": "Tu Empresa",
+      "publisherName": "PrintStation",
       "verifyUpdateCodeSignature": false
     },
     "nsis": {
@@ -131,8 +131,8 @@
       ],
       "icon": "assets/icon.png",
       "category": "Office",
-      "maintainer": "tu-email@empresa.com",
-      "vendor": "Tu Empresa",
+      "maintainer": "dairo@printstation.app",
+      "vendor": "PrintStation",
       "synopsis": "Sistema de impresión distribuida",
       "description": "Aplicación de escritorio para impresión remota de documentos generados por aplicaciones web"
     },

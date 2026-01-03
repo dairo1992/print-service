@@ -20,6 +20,13 @@ let tray = null;
 let pollingInterval = null;
 let browserInstance = null;
 
+// Exponential Backoff Configuration
+let currentPollingInterval = 5000; // Start at 5 seconds
+const MIN_POLLING_INTERVAL = 5000; // 5 seconds
+const MAX_POLLING_INTERVAL = 60000; // 60 seconds
+let consecutiveFailures = 0;
+const MAX_CONSECUTIVE_FAILURES = 5;
+
 // ============================================================
 // INICIALIZACIÓN DE LA APLICACIÓN
 // ============================================================
@@ -43,7 +50,7 @@ async function createWindow() {
         mainWindow.loadURL('http://localhost:3000');
         mainWindow.webContents.openDevTools();
     } else {
-        mainWindow.loadFile(path.join(__dirname, 'build/index.js'));
+        mainWindow.loadFile(path.join(__dirname, 'build/index.html'));
     }
 
     mainWindow.once('ready-to-show', () => {
@@ -233,22 +240,68 @@ async function initializePrintSystem() {
 function startPolling() {
     if (pollingInterval) return;
 
-    console.log('Iniciando polling de trabajos...');
+    log('INFO', 'Iniciando polling de trabajos...');
 
-    // Polling cada 5 segundos
-    pollingInterval = setInterval(async () => {
+    // Reset backoff on start
+    currentPollingInterval = MIN_POLLING_INTERVAL;
+    consecutiveFailures = 0;
+
+    scheduleNextPoll();
+}
+
+function scheduleNextPoll() {
+    if (pollingInterval) {
+        clearTimeout(pollingInterval);
+    }
+
+    pollingInterval = setTimeout(async () => {
         await fetchAndProcessJobs();
-    }, 5000);
+        scheduleNextPoll();
+    }, currentPollingInterval);
 
-    // Ejecutar inmediatamente
-    fetchAndProcessJobs();
+    // Execute immediately on first call
+    if (consecutiveFailures === 0) {
+        fetchAndProcessJobs();
+    }
 }
 
 function stopPolling() {
     if (pollingInterval) {
-        clearInterval(pollingInterval);
+        clearTimeout(pollingInterval);
         pollingInterval = null;
-        console.log('Polling detenido');
+        log('INFO', 'Polling detenido');
+    }
+}
+
+function adjustPollingInterval(success) {
+    if (success) {
+        // Reset to minimum on success
+        consecutiveFailures = 0;
+        currentPollingInterval = MIN_POLLING_INTERVAL;
+    } else {
+        // Exponential backoff on failure
+        consecutiveFailures++;
+        currentPollingInterval = Math.min(
+            currentPollingInterval * 2,
+            MAX_POLLING_INTERVAL
+        );
+        log('WARN', `Backoff activado: siguiente intento en ${currentPollingInterval / 1000}s (fallo ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`);
+    }
+}
+
+function log(level, message) {
+    const timestamp = new Date().toISOString();
+    const prefix = `[${timestamp}] [${level}]`;
+
+    switch (level) {
+        case 'ERROR':
+            console.error(`${prefix} ${message}`);
+            break;
+        case 'WARN':
+            console.warn(`${prefix} ${message}`);
+            break;
+        default:
+            console.log(`${prefix} ${message}`);
     }
 }
 
@@ -268,11 +321,19 @@ async function fetchAndProcessJobs() {
 
         const jobs = response.data.jobs || [];
 
+        // Connection successful - reset backoff
+        adjustPollingInterval(true);
+
+        // Notify renderer of connection status
+        if (mainWindow && mainWindow.webContents) {
+            mainWindow.webContents.send('connection-status', true);
+        }
+
         if (jobs.length > 0) {
-            console.log(`${jobs.length} trabajos encontrados`);
+            log('INFO', `${jobs.length} trabajos encontrados`);
 
             // Notificar al renderer
-            if (mainWindow) {
+            if (mainWindow && mainWindow.webContents) {
                 mainWindow.webContents.send('jobs-update', jobs);
             }
 
@@ -282,13 +343,22 @@ async function fetchAndProcessJobs() {
             }
         }
     } catch (error) {
-        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-            console.error('No se pudo conectar al servidor');
-            if (mainWindow) {
+        // Apply exponential backoff
+        adjustPollingInterval(false);
+
+        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
+            log('ERROR', `No se pudo conectar al servidor: ${error.code}`);
+            if (mainWindow && mainWindow.webContents) {
                 mainWindow.webContents.send('connection-status', false);
             }
+        } else if (error.response) {
+            // Server responded with error status
+            log('ERROR', `Error del servidor: ${error.response.status} - ${error.response.statusText}`);
+            if (error.response.status === 401) {
+                log('WARN', 'Token expirado o inválido. Requiere reconfiguración.');
+            }
         } else {
-            console.error('Error en polling:', error.message);
+            log('ERROR', `Error en polling: ${error.message}`);
         }
     }
 }
