@@ -162,6 +162,9 @@ async function loadConfig() {
 
             updateConfigStatus(true);
             updateConnectionStatus(true);
+            
+            // Render dynamic printer mappings from server config
+            renderPrinterMappingUI();
         } else {
             updateConfigStatus(false);
             updateConnectionStatus(false);
@@ -198,11 +201,14 @@ async function handleConfigSubmit(event) {
         const result = await window.electronAPI.saveConfig(config);
 
         if (result.success) {
-            state.config = config;
+            state.config = { ...config, ...result.data };
             updateConfigStatus(true);
             updateConnectionStatus(true);
             showToast('Configuración guardada correctamente', 'success');
 
+            // Render dynamic printer mappings from server response
+            renderPrinterMappingUI();
+            
             // Reload printers after config is saved
             await loadPrinters();
         } else {
@@ -331,6 +337,68 @@ function loadPrinterMappings() {
             select.value = mappings[type] || '';
         }
     });
+}
+
+// Render dynamic printer mapping UI based on server config
+function renderPrinterMappingUI() {
+    const container = document.getElementById('printerMappingGrid');
+    const actionsContainer = document.getElementById('mappingActions');
+    
+    if (!state.config || !state.config.printerMappings) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">⚙️</div>
+                <p>Configura las credenciales primero para cargar los tipos de documento</p>
+            </div>
+        `;
+        actionsContainer.style.display = 'none';
+        return;
+    }
+    
+    const mappings = state.config.printerMappings;
+    const types = Object.keys(mappings);
+    
+    if (types.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <p>No hay tipos de documento configurados en el servidor</p>
+            </div>
+        `;
+        actionsContainer.style.display = 'none';
+        return;
+    }
+    
+    // Generate printer options HTML
+    const printerOptions = state.printers.map(p => 
+        `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}</option>`
+    ).join('');
+    
+    // Generate mapping items for each type from server
+    container.innerHTML = types.map(type => {
+        const icon = getDocumentTypeIcon(type);
+        const label = capitalizeFirst(type);
+        const currentValue = mappings[type] || '';
+        
+        return `
+            <div class="printer-mapping-item">
+                <div class="printer-type-label">
+                    <span class="printer-type-icon">${icon}</span>
+                    ${escapeHtml(label)}
+                </div>
+                <select class="form-select" id="mapping-${escapeHtml(type)}" data-type="${escapeHtml(type)}">
+                    <option value="">-- Seleccionar --</option>
+                    ${printerOptions}
+                </select>
+            </div>
+        `;
+    }).join('');
+    
+    // Show save button
+    actionsContainer.style.display = 'block';
+    
+    // Set current values
+    loadPrinterMappings();
 }
 
 async function handleSaveMappings() {
@@ -525,13 +593,30 @@ window.retryJob = retryJob;
 // Helper Functions
 // ============================================================
 function getDocumentTypeLabel(type) {
-    const labels = {
-        invoice: '🧾 Factura',
-        label: '🏷️ Etiqueta',
-        report: '📊 Reporte',
-        default: '📄 Documento'
+    const icon = getDocumentTypeIcon(type);
+    const label = capitalizeFirst(type);
+    return `${icon} ${label}`;
+}
+
+function getDocumentTypeIcon(type) {
+    const icons = {
+        invoice: '🧾',
+        factura: '🧾',
+        label: '🏷️',
+        etiqueta: '🏷️',
+        report: '📊',
+        reporte: '📊',
+        reportes: '📊',
+        cocina: '🍳',
+        bar: '🍺',
+        default: '📄'
     };
-    return labels[type] || labels.default;
+    return icons[type.toLowerCase()] || '📄';
+}
+
+function capitalizeFirst(str) {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 function getStatusIcon(status) {

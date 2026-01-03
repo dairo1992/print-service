@@ -163,44 +163,12 @@
                             </div>
                             <div class="card-body">
                                 <div class="printer-mapping-grid" id="printerMappingGrid">
-                                    <div class="printer-mapping-item">
-                                        <div class="printer-type-label">
-                                            <span class="printer-type-icon">🧾</span>
-                                            Facturas
-                                        </div>
-                                        <select class="form-select" id="mapping-invoice" data-type="invoice">
-                                            <option value="">-- Seleccionar --</option>
-                                        </select>
-                                    </div>
-                                    <div class="printer-mapping-item">
-                                        <div class="printer-type-label">
-                                            <span class="printer-type-icon">🏷️</span>
-                                            Etiquetas
-                                        </div>
-                                        <select class="form-select" id="mapping-label" data-type="label">
-                                            <option value="">-- Seleccionar --</option>
-                                        </select>
-                                    </div>
-                                    <div class="printer-mapping-item">
-                                        <div class="printer-type-label">
-                                            <span class="printer-type-icon">📊</span>
-                                            Reportes
-                                        </div>
-                                        <select class="form-select" id="mapping-report" data-type="report">
-                                            <option value="">-- Seleccionar --</option>
-                                        </select>
-                                    </div>
-                                    <div class="printer-mapping-item">
-                                        <div class="printer-type-label">
-                                            <span class="printer-type-icon">📄</span>
-                                            Por Defecto
-                                        </div>
-                                        <select class="form-select" id="mapping-default" data-type="default">
-                                            <option value="">-- Seleccionar --</option>
-                                        </select>
+                                    <div class="empty-state">
+                                        <div class="empty-state-icon">⚙️</div>
+                                        <p>Configura las credenciales primero para cargar los tipos de documento</p>
                                     </div>
                                 </div>
-                                <div class="mt-lg">
+                                <div class="mt-lg" id="mappingActions" style="display: none;">
                                     <button class="btn btn-primary" id="saveMappingsBtn">
                                         💾 Guardar Mapeo
                                     </button>
