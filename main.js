@@ -160,7 +160,7 @@ ipcMain.handle('get-config', async () => {
 ipcMain.handle('save-config', async (event, config) => {
     try {
         // Validar credenciales con el servidor
-        const response = await axios.post(`${config.apiUrl}/api/auth/validate`, {
+        const response = await axios.post(`${config.apiUrl}?action=validate`, {
             client_id: config.clientId,
             api_key: config.apiKey
         }, {
