@@ -337,10 +337,13 @@ async function fetchAndProcessJobs() {
         log('INFO', `[POLLING] Respuesta data: ${JSON.stringify(response.data)}`);
 
         // Aceptar tanto 'jobs' como 'pendientes' del API
-        const jobs = response.data.jobs || response.data.pendientes || [];
+        const newJobs = response.data.jobs || response.data.pendientes || [];
 
-        // Guardar trabajos localmente para la UI
-        store.set('jobs', jobs);
+        // Actualizar historia de trabajos (merge)
+        updateLocalJobHistory(newJobs);
+        
+        // Obtener la lista completa actualizada para enviarla a la UI
+        const allJobs = store.get('jobs') || [];
 
         // Connection successful - reset backoff
         adjustPollingInterval(true);
@@ -350,23 +353,23 @@ async function fetchAndProcessJobs() {
             mainWindow.webContents.send('connection-status', true);
         }
 
-        if (jobs.length > 0) {
-            log('INFO', `${jobs.length} trabajos encontrados`);
+        if (newJobs.length > 0) {
+            log('INFO', `${newJobs.length} nuevos trabajos encontrados`);
 
-            // Notificar al renderer
+            // Notificar al renderer con la lista COMPLETA
             if (mainWindow && mainWindow.webContents) {
-                mainWindow.webContents.send('jobs-update', jobs);
+                mainWindow.webContents.send('jobs-update', allJobs);
             }
 
-            // Procesar cada trabajo
-            for (const job of jobs) {
+            // Procesar cada NUEVO trabajo
+            for (const job of newJobs) {
                 await processJob(job);
             }
         } else {
             log('INFO', '[POLLING] No hay trabajos pendientes');
-            // Notificar lista vacía al renderer
+            // Notificar lista completa al renderer (para mantener la UI actualizada)
             if (mainWindow && mainWindow.webContents) {
-                mainWindow.webContents.send('jobs-update', []);
+                mainWindow.webContents.send('jobs-update', allJobs);
             }
         }
     } catch (error) {
@@ -411,6 +414,7 @@ async function processJob(job) {
 
         // Notificar inicio de procesamiento
         await notifyServer(job.id, 'processing');
+        updateLocalJobStatus(job.id, 'processing'); // Actualizar localmente
 
         if (mainWindow) {
             mainWindow.webContents.send('job-status', {
@@ -452,6 +456,7 @@ async function processJob(job) {
             printer: printerName,
             timestamp: new Date().toISOString()
         });
+        updateLocalJobStatus(job.id, 'completed'); // Actualizar localmente
 
         if (mainWindow) {
             mainWindow.webContents.send('job-status', {
@@ -470,6 +475,7 @@ async function processJob(job) {
             error: error.message,
             timestamp: new Date().toISOString()
         });
+        updateLocalJobStatus(job.id, 'failed', error.message); // Actualizar localmente
 
         if (mainWindow) {
             mainWindow.webContents.send('job-status', {
