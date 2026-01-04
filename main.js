@@ -491,27 +491,60 @@ async function renderHTMLToPDF(htmlContent, job) {
     const page = await browserInstance.newPage();
 
     try {
-        // Configurar viewport segÃºn el formato
-        const format = job.format || 'A4';
-
         await page.setContent(htmlContent, {
             waitUntil: 'networkidle0'
         });
 
-        // Esperar a que se carguen las fuentes
+        // Esperar a que se carguen las fuentes e imágenes
         await page.evaluateHandle('document.fonts.ready');
 
-        // Generar PDF
-        const pdfBuffer = await page.pdf({
-            format: format,
-            printBackground: true,
-            margin: {
+        // Detectar si es impresiÃ³n POS (tÃ©rmica)
+        // Se considera POS si el formato es '80mm', '58mm' o si el tipo es cocina/bar/ticket
+        const jobType = (job.type || job.document_type || '').toLowerCase();
+        const format = (job.format || '').toLowerCase();
+        
+        const isPos = ['cocina', 'bar', 'ticket', 'pos'].includes(jobType) || 
+                      format === '80mm' || 
+                      format === '58mm';
+
+        let pdfOptions = {
+            printBackground: true
+        };
+
+        if (isPos) {
+            // ConfiguraciÃ³n Ã³ptima para POS / TÃ©rmica
+            // 1. Calcular altura dinÃ¡mica basada en el contenido
+            const bodyHeight = await page.evaluate(() => {
+                // Agregar un pequeÃ±o padding para asegurar que no se corte
+                return document.body.scrollHeight + 50; 
+            });
+
+            // 2. Ancho fijo (default 80mm o lo que diga el formato)
+            const width = format === '58mm' ? '58mm' : '80mm';
+
+            pdfOptions.width = width;
+            pdfOptions.height = `${bodyHeight}px`;
+            pdfOptions.margin = {
+                top: '0mm',
+                right: '0mm',
+                bottom: '0mm',
+                left: '0mm'
+            };
+            
+            console.log(`[RENDER] Generando PDF POS: ${width} x ${bodyHeight}px`);
+        } else {
+            // ConfiguraciÃ³n estÃ¡ndar A4/Letter
+            pdfOptions.format = (format && format !== 'a4') ? format : 'A4';
+            pdfOptions.margin = {
                 top: '10mm',
                 right: '10mm',
                 bottom: '10mm',
                 left: '10mm'
-            }
-        });
+            };
+        }
+
+        // Generar PDF
+        const pdfBuffer = await page.pdf(pdfOptions);
 
         return pdfBuffer;
     } finally {
@@ -541,12 +574,22 @@ async function printPDF(pdfBuffer, printerName, job) {
         // Escribir PDF a archivo temporal
         await fs.writeFile(tempFile, pdfBuffer);
 
-        // Imprimir usando pdf-to-printer
-        await printer.print(tempFile, {
+        // Detectar si es POS para ajustar opciones de impresiÃ³n
+        const jobType = (job.type || job.document_type || '').toLowerCase();
+        const format = (job.format || '').toLowerCase();
+        const isPos = ['cocina', 'bar', 'ticket', 'pos'].includes(jobType) || 
+                      format === '80mm' || 
+                      format === '58mm';
+
+        const printOptions = {
             printer: printerName,
             copies: job.copies || 1,
-            scale: 'fit'
-        });
+            // Para POS usamos 'noscale' para evitar que se reduzca el ticket
+            scale: isPos ? 'noscale' : 'fit' 
+        };
+
+        // Imprimir usando pdf-to-printer
+        await printer.print(tempFile, printOptions);
 
         console.log(`Impreso en: ${printerName}`);
     } finally {
