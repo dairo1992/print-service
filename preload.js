@@ -32,6 +32,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('connection-status', (event, isConnected) => callback(isConnected));
     },
 
+    onStatsUpdate: (callback) => {
+        ipcRenderer.on('stats-update', (event, stats) => callback(stats));
+    },
+
     // Remover listeners
     removeAllListeners: () => {
         ipcRenderer.removeAllListeners('jobs-update');

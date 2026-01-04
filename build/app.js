@@ -143,6 +143,15 @@ function setupIPCListeners() {
     window.electronAPI.onConnectionStatus((isConnected) => {
         updateConnectionStatus(isConnected);
     });
+
+    // Stats update from main process
+    if (window.electronAPI.onStatsUpdate) {
+        window.electronAPI.onStatsUpdate((stats) => {
+            console.log('Stats updated:', stats);
+            state.stats = stats;
+            updateStatsDisplay();
+        });
+    }
 }
 
 // ============================================================

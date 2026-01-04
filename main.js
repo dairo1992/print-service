@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // ARCHIVO: main.js (Proceso Principal de Electron)
 // ============================================================
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require('electron');
@@ -12,7 +12,7 @@ const os = require('os');
 
 // Almacenamiento persistente local
 const store = new Store({
-    encryptionKey: 'tu-clave-segura-aqui' // Cambia esto en producción
+    encryptionKey: 'tu-clave-segura-aqui' // Cambia esto en producciÃ³n
 });
 
 let mainWindow = null;
@@ -28,7 +28,7 @@ let consecutiveFailures = 0;
 const MAX_CONSECUTIVE_FAILURES = 5;
 
 // ============================================================
-// INICIALIZACIÓN DE LA APLICACIÓN
+// INICIALIZACIÃ“N DE LA APLICACIÃ“N
 // ============================================================
 async function createWindow() {
     mainWindow = new BrowserWindow({
@@ -70,11 +70,11 @@ async function createWindow() {
 }
 
 function createTray() {
-    // Esto asegura que la ruta sea correcta sin importar desde dónde se ejecute el proceso
+    // Esto asegura que la ruta sea correcta sin importar desde dÃ³nde se ejecute el proceso
     const iconPath = path.join(__dirname, 'assets', 'tray-icon.png');
     const icon = nativeImage.createFromPath(iconPath);
 
-    // Verifica si el icono es válido antes de crear el Tray
+    // Verifica si el icono es vÃ¡lido antes de crear el Tray
     if (icon.isEmpty()) {
         console.error("No se pudo encontrar el icono en:", iconPath);
         return;
@@ -95,7 +95,7 @@ function createTray() {
         },
         { type: 'separator' },
         {
-            label: 'Pausar impresión',
+            label: 'Pausar impresiÃ³n',
             type: 'checkbox',
             checked: false,
             click: (menuItem) => {
@@ -116,7 +116,7 @@ function createTray() {
         }
     ]);
 
-    tray.setToolTip('PrintStation - Sistema de Impresión');
+    tray.setToolTip('PrintStation - Sistema de ImpresiÃ³n');
     tray.setContextMenu(contextMenu);
 
     tray.on('click', () => {
@@ -127,7 +127,7 @@ function createTray() {
 app.whenReady().then(async () => {
     await createWindow();
 
-    // Si ya está configurado, iniciar polling automáticamente
+    // Si ya estÃ¡ configurado, iniciar polling automÃ¡ticamente
     if (isConfigured()) {
         await initializePrintSystem();
     }
@@ -146,7 +146,7 @@ app.on('activate', () => {
 });
 
 // ============================================================
-// SISTEMA DE AUTENTICACIÓN Y CONFIGURACIÓN
+// SISTEMA DE AUTENTICACIÃ“N Y CONFIGURACIÃ“N
 // ============================================================
 function isConfigured() {
     const config = store.get('config');
@@ -168,7 +168,7 @@ ipcMain.handle('save-config', async (event, config) => {
         });
 
         if (response.data.success) {
-            // Guardar configuración localmente
+            // Guardar configuraciÃ³n localmente
             store.set('config', {
                 clientId: config.clientId,
                 apiUrl: config.apiUrl,
@@ -177,7 +177,7 @@ ipcMain.handle('save-config', async (event, config) => {
                 printerMappings: response.data.printer_mappings || {}
             });
 
-            // Inicializar sistema de impresión (no bloqueante)
+            // Inicializar sistema de impresiÃ³n (no bloqueante)
             initializePrintSystem().catch(err => {
                 log('ERROR', `Error inicializando sistema de impresión: ${err.message}`);
                 if (mainWindow && mainWindow.webContents) {
@@ -189,10 +189,10 @@ ipcMain.handle('save-config', async (event, config) => {
 
             return { success: true, data: response.data };
         } else {
-            return { success: false, error: 'Credenciales inválidas' };
+            return { success: false, error: 'Credenciales invÃ¡lidas' };
         }
     } catch (error) {
-        console.error('Error al validar configuración:', error);
+        console.error('Error al validar configuraciÃ³n:', error);
         return {
             success: false,
             error: error.response?.data?.message || error.message || 'Error al conectar con el servidor'
@@ -315,7 +315,7 @@ function log(level, message) {
 async function fetchAndProcessJobs() {
     const config = store.get('config');
     if (!config) {
-        log('WARN', 'No hay configuración guardada, saltando polling');
+        log('WARN', 'No hay configuraciÃ³n guardada, saltando polling');
         return;
     }
 
@@ -392,7 +392,7 @@ async function fetchAndProcessJobs() {
             // Server responded with error status
             log('ERROR', `Error del servidor: ${error.response.status} - ${error.response.statusText}`);
             if (error.response.status === 401) {
-                log('WARN', 'Token expirado o inválido. Requiere reconfiguración.');
+                log('WARN', 'Token expirado o invÃ¡lido. Requiere reconfiguraciÃ³n.');
             }
         } else {
             log('ERROR', `Error en polling: ${error.message}`);
@@ -401,7 +401,7 @@ async function fetchAndProcessJobs() {
 }
 
 // ============================================================
-// PROCESAMIENTO DE TRABAJOS DE IMPRESIÓN
+// PROCESAMIENTO DE TRABAJOS DE IMPRESIÃ“N
 // ============================================================
 async function processJob(job) {
     const config = store.get('config');
@@ -451,7 +451,7 @@ async function processJob(job) {
         // 4. Imprimir
         await printPDF(pdfBuffer, printerName, job);
 
-        // 5. Notificar éxito
+        // 5. Notificar Ã©xito
         await notifyServer(job.id, 'completed', {
             printer: printerName,
             timestamp: new Date().toISOString()
@@ -465,10 +465,10 @@ async function processJob(job) {
             });
         }
 
-        console.log(`✓ Trabajo ${job.id} completado exitosamente`);
+        console.log(`âœ“ Trabajo ${job.id} completado exitosamente`);
 
     } catch (error) {
-        console.error(`✗ Error procesando trabajo ${job.id}:`, error.message);
+        console.error(`âœ— Error procesando trabajo ${job.id}:`, error.message);
 
         // Notificar error
         await notifyServer(job.id, 'failed', {
@@ -491,7 +491,7 @@ async function renderHTMLToPDF(htmlContent, job) {
     const page = await browserInstance.newPage();
 
     try {
-        // Configurar viewport según el formato
+        // Configurar viewport segÃºn el formato
         const format = job.format || 'A4';
 
         await page.setContent(htmlContent, {
@@ -595,7 +595,7 @@ async function notifyServer(jobId, status, details = {}) {
 // HANDLERS IPC PARA LA INTERFAZ
 // ============================================================
 ipcMain.handle('get-stats', async () => {
-    // Retornar estadísticas desde almacenamiento local
+    // Retornar estadÃ­sticas desde almacenamiento local
     return store.get('stats') || {
         pending: 0,
         processing: 0,
@@ -629,3 +629,70 @@ app.on('before-quit', async () => {
         await browserInstance.close();
     }
 });
+
+// ============================================================
+// HELPER FUNCTIONS FOR LOCAL STATE MANAGEMENT
+// ============================================================
+function updateLocalJobHistory(newJobs) {
+    if (!newJobs || newJobs.length === 0) return;
+    
+    // Get existing jobs
+    let currentJobs = store.get('jobs') || [];
+    
+    // Merge new jobs (avoid duplicates)
+    newJobs.forEach(newJob => {
+        const index = currentJobs.findIndex(j => j.id === newJob.id);
+        if (index === -1) {
+            // New job - add to beginning
+            currentJobs.unshift(newJob);
+        } else {
+            // Existing job - update only if status changed?
+            // Usually we trust the server for new jobs, so update props
+            currentJobs[index] = { ...currentJobs[index], ...newJob };
+        }
+    });
+    
+    // Limit history to last 50 jobs to avoid bloat
+    if (currentJobs.length > 50) {
+        currentJobs = currentJobs.slice(0, 50);
+    }
+    
+    store.set('jobs', currentJobs);
+    calculateStats(currentJobs);
+}
+
+function updateLocalJobStatus(jobId, status, errorMessage = null) {
+    let currentJobs = store.get('jobs') || [];
+    const index = currentJobs.findIndex(j => j.id === jobId);
+    
+    if (index !== -1) {
+        currentJobs[index].status = status;
+        if (errorMessage) {
+            currentJobs[index].error_message = errorMessage;
+        }
+        store.set('jobs', currentJobs);
+        calculateStats(currentJobs);
+    }
+}
+
+function calculateStats(jobs) {
+    const stats = {
+        pending: 0,
+        processing: 0,
+        completed: 0,
+        failed: 0
+    };
+    
+    jobs.forEach(job => {
+        if (stats.hasOwnProperty(job.status)) {
+            stats[job.status]++;
+        }
+    });
+    
+    store.set('stats', stats);
+    
+    // Notify renderer of stats update
+    if (mainWindow && mainWindow.webContents) {
+        mainWindow.webContents.send('stats-update', stats);
+    }
+}
