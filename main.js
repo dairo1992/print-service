@@ -424,16 +424,26 @@ async function processJob(job) {
         }
 
         // 1. Obtener HTML del servidor
-        log('INFO', `[RENDER] GET ${config.apiUrl}?action=render&id=${job.id}`);
-        const htmlResponse = await axios.get(
-            `${config.apiUrl}?action=render&id=${job.id}`,
-            {
+        const renderUrl = `${config.apiUrl}?action=render&id=${job.id}`;
+        log('INFO', `[RENDER] GET ${renderUrl}`);
+        
+        let htmlResponse;
+        try {
+            htmlResponse = await axios.get(renderUrl, {
                 headers: {
                     'Authorization': `Bearer ${config.token}`
                 },
                 timeout: 30000
+            });
+        } catch (renderError) {
+            // Log detallado del error del servidor
+            if (renderError.response) {
+                const errorData = JSON.stringify(renderError.response.data).substring(0, 500); // Primeros 500 chars
+                log('ERROR', `[RENDER] Fallo servidor (${renderError.response.status}): ${errorData}`);
+                throw new Error(`Servidor devolvió error ${renderError.response.status} al renderizar: ${errorData}`);
             }
-        );
+            throw renderError;
+        }
 
         const htmlContent = htmlResponse.data;
         log('INFO', `[RENDER] HTML recibido: ${htmlContent.length} caracteres`);
