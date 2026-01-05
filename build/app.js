@@ -102,20 +102,34 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ============================================================
 // Navigation
 // ============================================================
+// ============================================================
+// Navigation
+// ============================================================
+function showSection(sectionId) {
+    // Update active nav item
+    elements.navItems.forEach(nav => {
+        if (nav.dataset.section === sectionId) {
+            nav.classList.add('active');
+        } else {
+            nav.classList.remove('active');
+        }
+    });
+
+    // Show corresponding section
+    elements.contentSections.forEach(section => {
+        section.classList.remove('active');
+    });
+    const targetSection = document.getElementById(`section-${sectionId}`);
+    if (targetSection) {
+        targetSection.classList.add('active');
+    }
+}
+
 function setupNavigation() {
     elements.navItems.forEach(item => {
         item.addEventListener('click', () => {
             const sectionId = item.dataset.section;
-
-            // Update active nav item
-            elements.navItems.forEach(nav => nav.classList.remove('active'));
-            item.classList.add('active');
-
-            // Show corresponding section
-            elements.contentSections.forEach(section => {
-                section.classList.remove('active');
-            });
-            document.getElementById(`section-${sectionId}`).classList.add('active');
+            showSection(sectionId);
         });
     });
 }
@@ -291,6 +305,10 @@ async function handleConfigSubmit(event) {
                 printerMappings: {}, // Clear/Init legacy
                 token: result.data.token
             };
+
+            // Explicitly sync state.config.printers if needed or just rely on store.set from main?
+            // Main process returns success=true and data. The app.state should mirror this.
+
             updateConfigStatus(true);
             updateConnectionStatus(true);
             showToast('✅ Configuración guardada correctamente', 'success');
