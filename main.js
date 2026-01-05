@@ -204,7 +204,7 @@ ipcMain.handle('save-config', async (event, config) => {
                 apiUrl: config.apiUrl,
                 apiKey: config.apiKey,
                 token: response.data.token,
-                printerMappings: response.data.printer_mappings || {}
+                printers: response.data.printers || []
             });
 
             // Inicializar sistema de impresiÃ³n (no bloqueante)
@@ -232,7 +232,7 @@ ipcMain.handle('save-config', async (event, config) => {
 
 ipcMain.handle('update-printer-mapping', async (event, mappings) => {
     const config = store.get('config');
-    config.printerMappings = mappings;
+    config.printers = mappings;
     store.set('config', config);
     return { success: true };
 });
@@ -436,8 +436,8 @@ async function fetchAndProcessJobs() {
 async function processJob(job) {
     const config = store.get('config');
 
-    // Normalizar el tipo de documento (soportar 'type' o 'document_type')
-    const jobType = job.type || job.document_type;
+    // Normalizar el tipo de documento (soportar 'type' o 'printer')
+    const jobType = job.type || job.printer;
 
     try {
         log('INFO', `Procesando trabajo ${job.id} (${jobType})`);
@@ -482,10 +482,30 @@ async function processJob(job) {
         const pdfBuffer = await renderHTMLToPDF(htmlContent, job);
 
         // 3. Seleccionar impresora
-        const printerName = selectPrinter(jobType, config.printerMappings);
+        console.log('Configured Printers:', JSON.stringify(config.printers));
+        console.log('Job Type:', jobType);
+
+        let printerName = selectPrinter(jobType, config.printers);
+        console.log('Selected Printer Name:', printerName);
 
         if (!printerName) {
-            throw new Error(`No hay impresora configurada para tipo: ${jobType}`);
+            // Intentar buscar la impresora por defecto del sistema
+            try {
+                console.log('No se seleccionó impresora de la configuración, buscando por defecto del sistema...');
+                const systemPrinters = await printer.getPrinters();
+                const defaultPrinter = systemPrinters.find(p => p.isDefault);
+
+                if (defaultPrinter) {
+                    printerName = defaultPrinter.name || defaultPrinter.deviceId;
+                    console.log(`Usando impresora por defecto del sistema: ${printerName}`);
+                }
+            } catch (err) {
+                console.warn('Error buscando impresora por defecto del sistema:', err);
+            }
+        }
+
+        if (!printerName) {
+            throw new Error(`No hay impresora configurada y no se encontró una por defecto en el sistema`);
         }
 
         // 4. Imprimir
@@ -540,7 +560,7 @@ async function renderHTMLToPDF(htmlContent, job) {
 
         // Detectar si es impresiÃ³n POS (tÃ©rmica)
         // Se considera POS si el formato es '80mm', '58mm' o si el tipo es cocina/bar/ticket
-        const jobType = (job.type || job.document_type || '').toLowerCase();
+        const jobType = (job.type || job.printer || '').toLowerCase();
         const format = (job.format || '').toLowerCase();
 
         const isPos = ['cocina', 'bar', 'ticket', 'pos'].includes(jobType) ||
@@ -615,7 +635,7 @@ async function printPDF(pdfBuffer, printerName, job) {
         await fs.writeFile(tempFile, pdfBuffer);
 
         // Detectar si es POS para ajustar opciones de impresión
-        const jobType = (job.type || job.document_type || '').toLowerCase();
+        const jobType = (job.type || job.printer || '').toLowerCase();
         const format = (job.format || '').toLowerCase();
         const isPos = ['cocina', 'bar', 'ticket', 'pos'].includes(jobType) ||
             format === '80mm' ||

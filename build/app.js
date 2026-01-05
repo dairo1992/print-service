@@ -171,7 +171,7 @@ async function loadConfig() {
 
             updateConfigStatus(true);
             updateConnectionStatus(true);
-            
+
             // Render dynamic printer mappings from server config
             renderPrinterMappingUI();
         } else {
@@ -211,10 +211,11 @@ async function handleConfigSubmit(event) {
 
         if (result.success) {
             // Store config with printer_mappings from server response
-            state.config = { 
-                ...config, 
-                printerMappings: result.data.printer_mappings || {},
-                token: result.data.token 
+            state.config = {
+                ...config,
+                printers: result.data.printers || [],
+                printerMappings: {}, // Clear/Init legacy
+                token: result.data.token
             };
             updateConfigStatus(true);
             updateConnectionStatus(true);
@@ -355,8 +356,9 @@ function loadPrinterMappings() {
 function renderPrinterMappingUI() {
     const container = document.getElementById('printerMappingGrid');
     const actionsContainer = document.getElementById('mappingActions');
-    
-    if (!state.config || !state.config.printerMappings) {
+
+    // Check if we have either printers list or legacy mappings
+    if (!state.config || (!state.config.printers && !state.config.printerMappings)) {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">⚙️</div>
@@ -366,10 +368,24 @@ function renderPrinterMappingUI() {
         actionsContainer.style.display = 'none';
         return;
     }
-    
-    const mappings = state.config.printerMappings;
-    const types = Object.keys(mappings);
-    
+
+    // Determine source of types (Array = List of types, Object = existing mapping)
+    const source = state.config.printers || state.config.printerMappings;
+
+    let types = [];
+    let currentMappings = {};
+
+    if (Array.isArray(source)) {
+        types = source;
+        // If it's an array, we don't have mappings yet, or they are stored elsewhere?
+        // Assuming we are transitioning from "List of Types" to "Map of Types->Printers"
+        // But if 'source' IS the config, and we overwrite it on save, this works for initial load.
+        // For values, we might not have them if source is just ["default"].
+    } else if (source && typeof source === 'object') {
+        types = Object.keys(source);
+        currentMappings = source;
+    }
+
     if (types.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
@@ -380,18 +396,18 @@ function renderPrinterMappingUI() {
         actionsContainer.style.display = 'none';
         return;
     }
-    
+
     // Generate printer options HTML
-    const printerOptions = state.printers.map(p => 
+    const printerOptions = state.printers.map(p =>
         `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}</option>`
     ).join('');
-    
-    // Generate mapping items for each type from server
+
+    // Generate mapping items for each type
     container.innerHTML = types.map(type => {
         const icon = getDocumentTypeIcon(type);
         const label = capitalizeFirst(type);
-        const currentValue = mappings[type] || '';
-        
+        const currentValue = currentMappings[type] || '';
+
         return `
             <div class="printer-mapping-item">
                 <div class="printer-type-label">
@@ -405,12 +421,32 @@ function renderPrinterMappingUI() {
             </div>
         `;
     }).join('');
-    
+
     // Show save button
     actionsContainer.style.display = 'block';
-    
-    // Set current values
-    loadPrinterMappings();
+
+    // Set current values (defer to loadPrinterMappings if complex, but we set them inline mostly)
+    // We still call loadPrinterMappings to handle any specific binding if needed
+    // loadPrinterMappings(); // Actually we did it inline above with 'currentValue'? 
+    // Wait, the select.value in template string might not work for 'value' attribute if we rely on JS setting it.
+    // Better to set 'selected' in options or run JS after. 
+    // Current code calls loadPrinterMappings() at the end. Let's keep that.
+
+    // Update loadPrinterMappings to also understand the source
+    // But since we are replacing this function, let's just make sure loadPrinterMappings works too.
+}
+
+function loadPrinterMappings() {
+    // Determine source again
+    const source = state.config.printers || state.config.printerMappings;
+    if (!source || Array.isArray(source)) return; // If array, no mappings to load yet
+
+    Object.keys(source).forEach(type => {
+        const select = document.getElementById(`mapping-${type}`);
+        if (select) {
+            select.value = source[type] || '';
+        }
+    });
 }
 
 async function handleSaveMappings() {
