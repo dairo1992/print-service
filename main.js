@@ -43,43 +43,6 @@ try {
     console.error('Error inicializando almacenamiento JSON:', error);
     console.error('Stack:', error.stack);
 }
-// try {
-//     Store = require('electron-store');
-//     store = new Store({
-//         encryptionKey: 'tu-clave-segura-aqui' // Cambia esto en producción
-//     });
-//     console.log('✓ electron-store inicializado correctamente');
-// } catch (error) {
-//     console.error('Error inicializando electron-store:', error);
-//     console.error('Stack:', error.stack);
-
-//     // Fallback a almacenamiento JSON simple
-//     const storeFilePath = path.join(app.getPath('userData'), 'config.json');
-//     store = {
-//         get: (key) => {
-//             try {
-//                 const data = require('fs').readFileSync(storeFilePath, 'utf8');
-//                 const parsed = JSON.parse(data);
-//                 return parsed[key];
-//             } catch {
-//                 return null;
-//             }
-//         },
-//         set: (key, value) => {
-//             try {
-//                 let data = {};
-//                 try {
-//                     data = JSON.parse(require('fs').readFileSync(storeFilePath, 'utf8'));
-//                 } catch { }
-//                 data[key] = value;
-//                 require('fs').writeFileSync(storeFilePath, JSON.stringify(data, null, 2));
-//             } catch (err) {
-//                 console.error('Error guardando configuración:', err);
-//             }
-//         }
-//     };
-//     console.log('⚠ Usando almacenamiento fallback JSON');
-// }
 
 let mainWindow = null;
 let tray = null;
@@ -651,7 +614,7 @@ async function printPDF(pdfBuffer, printerName, job) {
         // Escribir PDF a archivo temporal
         await fs.writeFile(tempFile, pdfBuffer);
 
-        // Detectar si es POS para ajustar opciones de impresiÃ³n
+        // Detectar si es POS para ajustar opciones de impresión
         const jobType = (job.type || job.document_type || '').toLowerCase();
         const format = (job.format || '').toLowerCase();
         const isPos = ['cocina', 'bar', 'ticket', 'pos'].includes(jobType) ||
@@ -665,8 +628,21 @@ async function printPDF(pdfBuffer, printerName, job) {
             scale: isPos ? 'noscale' : 'fit'
         };
 
-        // Imprimir usando pdf-to-printer
-        await printer.print(tempFile, printOptions);
+        // Función de impresión con timeout
+        const tryPrint = async () => {
+            const TIMEOUT_MS = 30000; // 30 segundos timeout
+
+            const printPromise = printer.print(tempFile, printOptions);
+
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Tiempo de espera agotado al enviar a la impresora (30s)')), TIMEOUT_MS);
+            });
+
+            await Promise.race([printPromise, timeoutPromise]);
+        };
+
+        // Reintentar hasta 3 veces
+        await retryOperation(tryPrint, 3, 2000, `Imprimir job ${job.id} en ${printerName}`);
 
         console.log(`Impreso en: ${printerName}`);
     } finally {
@@ -734,7 +710,10 @@ ipcMain.handle('retry-job', async (event, jobId) => {
     const job = jobs.find(j => j.id === jobId);
 
     if (job) {
-        await processJob(job);
+        // No esperar a que termine (fire-and-forget) para no bloquear la UI
+        processJob(job).catch(err => {
+            console.error(`Error en reintento manual del trabajo ${jobId}:`, err);
+        });
         return { success: true };
     }
 
@@ -815,4 +794,26 @@ function calculateStats(jobs) {
     if (mainWindow && mainWindow.webContents) {
         mainWindow.webContents.send('stats-update', stats);
     }
+}
+
+async function retryOperation(operation, maxAttempts, delayMs, description) {
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            if (attempt > 1) {
+                log('INFO', `Reintento ${attempt}/${maxAttempts} para: ${description}`);
+            }
+            return await operation();
+        } catch (error) {
+            lastError = error;
+            log('WARN', `Fallo intento ${attempt}/${maxAttempts} en ${description}: ${error.message}`);
+
+            if (attempt < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+        }
+    }
+
+    throw lastError || new Error(`Fallaron todos los intentos para: ${description}`);
 }
