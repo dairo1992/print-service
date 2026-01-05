@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getConfig: () => ipcRenderer.invoke('get-config'),
     saveConfig: (config) => ipcRenderer.invoke('save-config', config),
     testConnection: (config) => ipcRenderer.invoke('test-connection', config),
+    clearConfig: () => ipcRenderer.invoke('clear-config'),
     updatePrinterMapping: (mappings) => ipcRenderer.invoke('update-printer-mapping', mappings),
 
     // Impresoras

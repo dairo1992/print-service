@@ -58,7 +58,10 @@ const elements = {
 
     // Startup Settings
     openAtLoginInput: document.getElementById('openAtLogin'),
-    openAsHiddenInput: document.getElementById('openAsHidden')
+    openAsHiddenInput: document.getElementById('openAsHidden'),
+
+    // Factory Reset
+    clearConfigBtn: document.getElementById('clearConfigBtn')
 };
 
 // ============================================================
@@ -74,14 +77,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
 
     // Load initial data
-    await loadConfig();
-    await loadPrinters();
-    await loadStats();
-    await loadConfig();
-    await loadStartupSettings(); // Nuevo
-    await loadPrinters();
-    await loadStats();
-    await loadJobs();
+    const config = await loadConfig(); // Modified to return config
+
+    // STARTUP REDIRECTION LOGIC
+    if (!config || !config.apiUrl) {
+        console.log('No configuration found. Redirecting to Config...');
+        showSection('config');
+        showToast('Por favor configura la aplicación primero', 'info');
+    } else {
+        // Default to dashboard
+        showSection('dashboard');
+
+        // Continue loading data
+        await loadStartupSettings();
+        await loadPrinters();
+        await loadStats();
+        await loadJobs();
+    }
 
     // Setup IPC listeners
     setupIPCListeners();
@@ -114,13 +126,18 @@ function setupNavigation() {
 function setupEventListeners() {
     // Config Form
     elements.configForm.addEventListener('submit', handleConfigSubmit);
-    elements.testConnectionBtn.addEventListener('click', handleTestConnection);
+    if (elements.testConnectionBtn) {
+        elements.testConnectionBtn.addEventListener('click', handleTestConnection);
+    }
+
+    if (elements.clearConfigBtn) {
+        elements.clearConfigBtn.addEventListener('click', handleClearConfig);
+    }
 
     // Printers
     elements.refreshPrintersBtn.addEventListener('click', loadPrinters);
     elements.saveMappingsBtn.addEventListener('click', handleSaveMappings);
 
-    // Jobs
     // Jobs
     elements.refreshJobsBtn.addEventListener('click', loadJobs);
 
@@ -176,7 +193,7 @@ function setupIPCListeners() {
 // ============================================================
 async function loadConfig() {
     try {
-        if (!window.electronAPI) return;
+        if (!window.electronAPI) return null;
 
         const config = await window.electronAPI.getConfig();
         state.config = config;
@@ -187,17 +204,20 @@ async function loadConfig() {
             elements.apiKeyInput.value = config.apiKey || '';
 
             updateConfigStatus(true);
-            updateConnectionStatus(true);
+            updateConnectionStatus(!!config.token);
 
             // Render dynamic printer mappings from server config
             renderPrinterMappingUI();
+            return config; // Return for startup logic
         } else {
             updateConfigStatus(false);
             updateConnectionStatus(false);
+            return null;
         }
     } catch (error) {
         console.error('Error loading config:', error);
         showToast('Error al cargar la configuración', 'error');
+        return null;
     }
 }
 
@@ -273,11 +293,18 @@ async function handleConfigSubmit(event) {
             };
             updateConfigStatus(true);
             updateConnectionStatus(true);
-            showToast('Configuración guardada correctamente', 'success');
+            showToast('✅ Configuración guardada correctamente', 'success');
 
             // First load printers, then render mappings
             await loadPrinters();
             renderPrinterMappingUI();
+
+            // Redirect to Printers Mapping section on success
+            showToast('Redirigiendo a Mapeo de Impresoras...', 'info');
+            setTimeout(() => {
+                showSection('printers');
+            }, 1000);
+
         } else {
             showToast(result.error || 'Error al guardar la configuración', 'error');
         }
@@ -329,6 +356,25 @@ async function handleTestConnection() {
     } finally {
         elements.testConnectionBtn.disabled = false;
         elements.testConnectionBtn.innerHTML = '🔎 Probar Conexión';
+    }
+}
+
+async function handleClearConfig() {
+    if (!confirm('¿Estás seguro de que deseas borrar TODA la configuración y restablecer la aplicación? Esto no se puede deshacer.')) {
+        return;
+    }
+
+    try {
+        const result = await window.electronAPI.clearConfig();
+        if (result.success) {
+            alert('Configuración borrada. La aplicación se reiniciará.');
+            window.location.reload(); // Reload to trigger startup logic (which will redirect to Config)
+        } else {
+            showToast('Error al borrar configuración', 'error');
+        }
+    } catch (error) {
+        console.error('Error clearing config:', error);
+        showToast('Error al restablecer fábrica', 'error');
     }
 }
 
