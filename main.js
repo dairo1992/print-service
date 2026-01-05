@@ -3,17 +3,83 @@
 // ============================================================
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require('electron');
 const path = require('path');
-const Store = require('electron-store');
 const axios = require('axios');
 const printer = require('pdf-to-printer');
 const puppeteer = require('puppeteer');
 const fs = require('fs').promises;
 const os = require('os');
 
+// Inicializar Store con manejo de errores
+let store;
+
 // Almacenamiento persistente local
-const store = new Store({
-    encryptionKey: 'tu-clave-segura-aqui' // Cambia esto en producciÃ³n
-});
+try {
+    const storeFilePath = path.join(app.getPath('userData'), 'config.json');
+    store = {
+        get: (key) => {
+            try {
+                const data = require('fs').readFileSync(storeFilePath, 'utf8');
+                const parsed = JSON.parse(data);
+                return parsed[key];
+            } catch {
+                return null;
+            }
+        },
+        set: (key, value) => {
+            try {
+                let data = {};
+                try {
+                    data = JSON.parse(require('fs').readFileSync(storeFilePath, 'utf8'));
+                } catch { }
+                data[key] = value;
+                require('fs').writeFileSync(storeFilePath, JSON.stringify(data, null, 2));
+            } catch (err) {
+                console.error('Error guardando configuración:', err);
+            }
+        }
+    };
+    console.log('⚠ Usando almacenamiento fallback JSON');
+} catch (error) {
+    console.error('Error inicializando almacenamiento JSON:', error);
+    console.error('Stack:', error.stack);
+}
+// try {
+//     Store = require('electron-store');
+//     store = new Store({
+//         encryptionKey: 'tu-clave-segura-aqui' // Cambia esto en producción
+//     });
+//     console.log('✓ electron-store inicializado correctamente');
+// } catch (error) {
+//     console.error('Error inicializando electron-store:', error);
+//     console.error('Stack:', error.stack);
+
+//     // Fallback a almacenamiento JSON simple
+//     const storeFilePath = path.join(app.getPath('userData'), 'config.json');
+//     store = {
+//         get: (key) => {
+//             try {
+//                 const data = require('fs').readFileSync(storeFilePath, 'utf8');
+//                 const parsed = JSON.parse(data);
+//                 return parsed[key];
+//             } catch {
+//                 return null;
+//             }
+//         },
+//         set: (key, value) => {
+//             try {
+//                 let data = {};
+//                 try {
+//                     data = JSON.parse(require('fs').readFileSync(storeFilePath, 'utf8'));
+//                 } catch { }
+//                 data[key] = value;
+//                 require('fs').writeFileSync(storeFilePath, JSON.stringify(data, null, 2));
+//             } catch (err) {
+//                 console.error('Error guardando configuración:', err);
+//             }
+//         }
+//     };
+//     console.log('⚠ Usando almacenamiento fallback JSON');
+// }
 
 let mainWindow = null;
 let tray = null;
@@ -40,6 +106,7 @@ async function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            sandbox: false,
             preload: path.join(__dirname, 'preload.js')
         },
         show: false
@@ -341,7 +408,7 @@ async function fetchAndProcessJobs() {
 
         // Actualizar historia de trabajos (merge)
         updateLocalJobHistory(newJobs);
-        
+
         // Obtener la lista completa actualizada para enviarla a la UI
         const allJobs = store.get('jobs') || [];
 
@@ -377,7 +444,7 @@ async function fetchAndProcessJobs() {
         adjustPollingInterval(false);
 
         log('ERROR', `[POLLING] Error: ${error.message}`);
-        
+
         if (error.response) {
             log('ERROR', `[POLLING] Response status: ${error.response.status}`);
             log('ERROR', `[POLLING] Response data: ${JSON.stringify(error.response.data)}`);
@@ -405,7 +472,7 @@ async function fetchAndProcessJobs() {
 // ============================================================
 async function processJob(job) {
     const config = store.get('config');
-    
+
     // Normalizar el tipo de documento (soportar 'type' o 'document_type')
     const jobType = job.type || job.document_type;
 
@@ -426,7 +493,7 @@ async function processJob(job) {
         // 1. Obtener HTML del servidor
         const renderUrl = `${config.apiUrl}?action=render&id=${job.id}`;
         log('INFO', `[RENDER] GET ${renderUrl}`);
-        
+
         let htmlResponse;
         try {
             htmlResponse = await axios.get(renderUrl, {
@@ -512,10 +579,10 @@ async function renderHTMLToPDF(htmlContent, job) {
         // Se considera POS si el formato es '80mm', '58mm' o si el tipo es cocina/bar/ticket
         const jobType = (job.type || job.document_type || '').toLowerCase();
         const format = (job.format || '').toLowerCase();
-        
-        const isPos = ['cocina', 'bar', 'ticket', 'pos'].includes(jobType) || 
-                      format === '80mm' || 
-                      format === '58mm';
+
+        const isPos = ['cocina', 'bar', 'ticket', 'pos'].includes(jobType) ||
+            format === '80mm' ||
+            format === '58mm';
 
         let pdfOptions = {
             printBackground: true
@@ -526,7 +593,7 @@ async function renderHTMLToPDF(htmlContent, job) {
             // 1. Calcular altura dinÃ¡mica basada en el contenido
             const bodyHeight = await page.evaluate(() => {
                 // Agregar un pequeÃ±o padding para asegurar que no se corte
-                return document.body.scrollHeight + 50; 
+                return document.body.scrollHeight + 50;
             });
 
             // 2. Ancho fijo (default 80mm o lo que diga el formato)
@@ -540,7 +607,7 @@ async function renderHTMLToPDF(htmlContent, job) {
                 bottom: '0mm',
                 left: '0mm'
             };
-            
+
             console.log(`[RENDER] Generando PDF POS: ${width} x ${bodyHeight}px`);
         } else {
             // ConfiguraciÃ³n estÃ¡ndar A4/Letter
@@ -587,15 +654,15 @@ async function printPDF(pdfBuffer, printerName, job) {
         // Detectar si es POS para ajustar opciones de impresiÃ³n
         const jobType = (job.type || job.document_type || '').toLowerCase();
         const format = (job.format || '').toLowerCase();
-        const isPos = ['cocina', 'bar', 'ticket', 'pos'].includes(jobType) || 
-                      format === '80mm' || 
-                      format === '58mm';
+        const isPos = ['cocina', 'bar', 'ticket', 'pos'].includes(jobType) ||
+            format === '80mm' ||
+            format === '58mm';
 
         const printOptions = {
             printer: printerName,
             copies: job.copies || 1,
             // Para POS usamos 'noscale' para evitar que se reduzca el ticket
-            scale: isPos ? 'noscale' : 'fit' 
+            scale: isPos ? 'noscale' : 'fit'
         };
 
         // Imprimir usando pdf-to-printer
@@ -688,10 +755,10 @@ app.on('before-quit', async () => {
 // ============================================================
 function updateLocalJobHistory(newJobs) {
     if (!newJobs || newJobs.length === 0) return;
-    
+
     // Get existing jobs
     let currentJobs = store.get('jobs') || [];
-    
+
     // Merge new jobs (avoid duplicates)
     newJobs.forEach(newJob => {
         const index = currentJobs.findIndex(j => j.id === newJob.id);
@@ -704,12 +771,12 @@ function updateLocalJobHistory(newJobs) {
             currentJobs[index] = { ...currentJobs[index], ...newJob };
         }
     });
-    
+
     // Limit history to last 50 jobs to avoid bloat
     if (currentJobs.length > 50) {
         currentJobs = currentJobs.slice(0, 50);
     }
-    
+
     store.set('jobs', currentJobs);
     calculateStats(currentJobs);
 }
@@ -717,7 +784,7 @@ function updateLocalJobHistory(newJobs) {
 function updateLocalJobStatus(jobId, status, errorMessage = null) {
     let currentJobs = store.get('jobs') || [];
     const index = currentJobs.findIndex(j => j.id === jobId);
-    
+
     if (index !== -1) {
         currentJobs[index].status = status;
         if (errorMessage) {
@@ -735,15 +802,15 @@ function calculateStats(jobs) {
         completed: 0,
         failed: 0
     };
-    
+
     jobs.forEach(job => {
         if (stats.hasOwnProperty(job.status)) {
             stats[job.status]++;
         }
     });
-    
+
     store.set('stats', stats);
-    
+
     // Notify renderer of stats update
     if (mainWindow && mainWindow.webContents) {
         mainWindow.webContents.send('stats-update', stats);

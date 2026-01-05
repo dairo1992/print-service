@@ -2,7 +2,10 @@
 // ARCHIVO: preload.js
 // Bridge seguro entre el proceso principal y el renderer
 // ============================================================
+// ============================================================
 const { contextBridge, ipcRenderer } = require('electron');
+
+console.log('Preload script loaded successfully');
 
 // Exponer API segura al renderer
 contextBridge.exposeInMainWorld('electronAPI', {
