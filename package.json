@@ -50,6 +50,12 @@
       "assets/**/*",
       "node_modules/**/*"
     ],
+    "asarUnpack": [
+      "node_modules/electron-store/**/*",
+      "node_modules/conf/**/*",
+      "node_modules/atomically/**/*",
+      "node_modules/pdf-to-printer/**/*"
+    ],
     "extraResources": [
       {
         "from": "assets",
