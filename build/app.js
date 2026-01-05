@@ -291,7 +291,22 @@ async function handleConfigSubmit(event) {
 }
 
 async function handleTestConnection() {
-    showToast('Probando conexión...', 'info');
+    // Get values from inputs directly
+    const config = {
+        clientId: elements.clientIdInput.value.trim(),
+        apiUrl: elements.apiUrlInput.value.trim(),
+        apiKey: elements.apiKeyInput.value.trim()
+    };
+
+    if (!config.clientId || !config.apiUrl || !config.apiKey) {
+        showToast('Por favor, completa todos los campos para probar la conexión', 'warning');
+        return;
+    }
+
+    elements.testConnectionBtn.disabled = true;
+    elements.testConnectionBtn.innerHTML = '<span class="loading-spinner"></span> Probando...';
+
+    // showToast('Probando conexión...', 'info'); // Option: remove explicit toast if button indicates loading
 
     try {
         if (!window.electronAPI) {
@@ -299,19 +314,21 @@ async function handleTestConnection() {
             return;
         }
 
-        const config = await window.electronAPI.getConfig();
+        const result = await window.electronAPI.testConnection(config);
 
-        if (config && config.token) {
-            showToast('Conexión exitosa!', 'success');
+        if (result.success) {
+            showToast('✅ Conexión Exitosa', 'success');
             updateConnectionStatus(true);
         } else {
-            showToast('No hay configuración guardada', 'warning');
+            showToast(result.error || 'Error de conexión', 'error');
             updateConnectionStatus(false);
         }
     } catch (error) {
         console.error('Error testing connection:', error);
         showToast('Error al probar la conexión', 'error');
-        updateConnectionStatus(false);
+    } finally {
+        elements.testConnectionBtn.disabled = false;
+        elements.testConnectionBtn.innerHTML = '🔎 Probar Conexión';
     }
 }
 

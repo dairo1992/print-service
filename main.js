@@ -38,7 +38,7 @@ try {
             }
         }
     };
-    console.log('⚠ Usando almacenamiento fallback JSON');
+    console.log('Usando almacenamiento fallback JSON');
 } catch (error) {
     console.error('Error inicializando almacenamiento JSON:', error);
     console.error('Stack:', error.stack);
@@ -60,7 +60,7 @@ const MAX_CONSECUTIVE_FAILURES = 5;
 const STARTUP_HIDDEN_FLAG = '--hidden';
 
 // ============================================================
-// INICIALIZACIÃ“N DE LA APLICACIÃ“N
+// INICIALIZACION DE LA APLICACION
 // ============================================================
 async function createWindow() {
     mainWindow = new BrowserWindow({
@@ -87,8 +87,23 @@ async function createWindow() {
     }
 
     mainWindow.once('ready-to-show', () => {
-        // Check if launched with hidden flag (from startup registry)
+        // Check if launched with hidden flag (from startup registry OR args)
         const isHidden = process.argv.includes(STARTUP_HIDDEN_FLAG);
+
+        // Also sync startup settings from config to OS (self-healing)
+        try {
+            const config = store.get('config');
+            if (config && config.startup) {
+                const args = config.startup.openAsHidden ? [STARTUP_HIDDEN_FLAG] : [];
+                app.setLoginItemSettings({
+                    openAtLogin: config.startup.openAtLogin,
+                    openAsHidden: config.startup.openAsHidden,
+                    args: args
+                });
+            }
+        } catch (err) {
+            console.warn('Failed to sync startup settings', err);
+        }
 
         if (!isHidden) {
             mainWindow.show();
@@ -110,11 +125,11 @@ async function createWindow() {
 }
 
 function createTray() {
-    // Esto asegura que la ruta sea correcta sin importar desde dÃ³nde se ejecute el proceso
+    // Esto asegura que la ruta sea correcta sin importar desde dónde se ejecute el proceso
     const iconPath = path.join(__dirname, 'assets', 'tray-icon.png');
     const icon = nativeImage.createFromPath(iconPath);
 
-    // Verifica si el icono es vÃ¡lido antes de crear el Tray
+    // Verifica si el icono es válido antes de crear el Tray
     if (icon.isEmpty()) {
         console.error("No se pudo encontrar el icono en:", iconPath);
         return;
@@ -135,7 +150,7 @@ function createTray() {
         },
         { type: 'separator' },
         {
-            label: 'Pausar impresiÃ³n',
+            label: 'Pausar impresión',
             type: 'checkbox',
             checked: false,
             click: (menuItem) => {
@@ -156,7 +171,7 @@ function createTray() {
         }
     ]);
 
-    tray.setToolTip('PrintStation - Sistema de ImpresiÃ³n');
+    tray.setToolTip('PrintStation - Sistema de Impresión');
     tray.setContextMenu(contextMenu);
 
     tray.on('click', () => {
@@ -167,7 +182,7 @@ function createTray() {
 app.whenReady().then(async () => {
     await createWindow();
 
-    // Si ya estÃ¡ configurado, iniciar polling automÃ¡ticamente
+    // Si ya está configurado, iniciar polling automáticamente
     if (isConfigured()) {
         await initializePrintSystem();
     }
@@ -186,7 +201,7 @@ app.on('activate', () => {
 });
 
 // ============================================================
-// SISTEMA DE AUTENTICACIÃ“N Y CONFIGURACIÃ“N
+// SISTEMA DE AUTENTICACION Y CONFIGURACION
 // ============================================================
 function isConfigured() {
     const config = store.get('config');
@@ -195,6 +210,30 @@ function isConfigured() {
 
 ipcMain.handle('get-config', async () => {
     return store.get('config') || null;
+});
+
+// Nueva función para probar conexión sin guardar
+ipcMain.handle('test-connection', async (event, config) => {
+    try {
+        const response = await axios.post(`${config.apiUrl}?action=validate`, {
+            client_id: config.clientId,
+            api_key: config.apiKey
+        }, {
+            timeout: 10000
+        });
+
+        if (response.data.success) {
+            return { success: true, data: response.data };
+        } else {
+            return { success: false, error: response.data.error || 'Credenciales inválidas' };
+        }
+    } catch (error) {
+        console.error('Error probando conexión:', error);
+        return {
+            success: false,
+            error: error.response?.data?.message || error.message || 'Error de conexión con el servidor'
+        };
+    }
 });
 
 ipcMain.handle('save-config', async (event, config) => {
@@ -208,7 +247,7 @@ ipcMain.handle('save-config', async (event, config) => {
         });
 
         if (response.data.success) {
-            // Guardar configuraciÃ³n localmente
+            // Guardar configuración localmente
             store.set('config', {
                 clientId: config.clientId,
                 apiUrl: config.apiUrl,
@@ -217,7 +256,7 @@ ipcMain.handle('save-config', async (event, config) => {
                 printers: response.data.printers || []
             });
 
-            // Inicializar sistema de impresiÃ³n (no bloqueante)
+            // Inicializar sistema de impresión (no bloqueante)
             initializePrintSystem().catch(err => {
                 log('ERROR', `Error inicializando sistema de impresión: ${err.message}`);
                 if (mainWindow && mainWindow.webContents) {
@@ -229,10 +268,10 @@ ipcMain.handle('save-config', async (event, config) => {
 
             return { success: true, data: response.data };
         } else {
-            return { success: false, error: 'Credenciales invÃ¡lidas' };
+            return { success: false, error: 'Credenciales inválidas' };
         }
     } catch (error) {
-        console.error('Error al validar configuraciÃ³n:', error);
+        console.error('Error al validar configuración:', error);
         return {
             success: false,
             error: error.response?.data?.message || error.message || 'Error al conectar con el servidor'
@@ -249,10 +288,21 @@ ipcMain.handle('update-printer-mapping', async (event, mappings) => {
 });
 
 ipcMain.handle('get-startup-settings', async () => {
-    const loginSettings = app.getLoginItemSettings();
+    // Prefer config persistence (UI Switch state), fallback to OS check
+    const config = store.get('config') || {};
+    const startup = config.startup || {};
+
+    // Optional: Sync/Verify with OS truth?
+    // const loginSettings = app.getLoginItemSettings();
+    // return {
+    //    openAtLogin: startup.openAtLogin !== undefined ? startup.openAtLogin : loginSettings.openAtLogin,
+    //    openAsHidden: startup.openAsHidden !== undefined ? startup.openAsHidden : loginSettings.args.includes(STARTUP_HIDDEN_FLAG)
+    // };
+
+    // For User Config Consistency, return what we saved.
     return {
-        openAtLogin: loginSettings.openAtLogin,
-        openAsHidden: loginSettings.args.includes(STARTUP_HIDDEN_FLAG)
+        openAtLogin: startup.openAtLogin || false,
+        openAsHidden: startup.openAsHidden || false
     };
 });
 
@@ -260,12 +310,22 @@ ipcMain.handle('set-startup-settings', async (event, settings) => {
     try {
         const args = settings.openAsHidden ? [STARTUP_HIDDEN_FLAG] : [];
 
+        // 1. Update OS Registry
         app.setLoginItemSettings({
             openAtLogin: settings.openAtLogin,
             openAsHidden: settings.openAsHidden, // MacOS support
             args: args // Windows support (passed as CLI args)
         });
 
+        // 2. Persist in Config Store (for UI state)
+        const config = store.get('config') || {};
+        config.startup = {
+            openAtLogin: settings.openAtLogin,
+            openAsHidden: settings.openAsHidden
+        };
+        store.set('config', config);
+
+        console.log('Startup settings updated:', settings);
         return { success: true };
     } catch (error) {
         console.error('Error setting startup options:', error);
@@ -296,7 +356,7 @@ ipcMain.handle('get-printers', async () => {
 // SISTEMA DE POLLING Y PROCESAMIENTO DE TRABAJOS
 // ============================================================
 async function initializePrintSystem() {
-    console.log('Inicializando sistema de impresión...');
+    console.log('Inicializando sistema de impresion...');
 
     // Inicializar navegador headless para renderizado
     if (!browserInstance) {
@@ -381,7 +441,7 @@ function log(level, message) {
 async function fetchAndProcessJobs() {
     const config = store.get('config');
     if (!config) {
-        log('WARN', 'No hay configuraciÃ³n guardada, saltando polling');
+        log('WARN', 'No hay configuración guardada, saltando polling');
         return;
     }
 
@@ -458,7 +518,7 @@ async function fetchAndProcessJobs() {
             // Server responded with error status
             log('ERROR', `Error del servidor: ${error.response.status} - ${error.response.statusText}`);
             if (error.response.status === 401) {
-                log('WARN', 'Token expirado o invÃ¡lido. Requiere reconfiguraciÃ³n.');
+                log('WARN', 'Token expirado o inválido. Requiere reconfiguración.');
             }
         } else {
             log('ERROR', `Error en polling: ${error.message}`);
@@ -467,7 +527,7 @@ async function fetchAndProcessJobs() {
 }
 
 // ============================================================
-// PROCESAMIENTO DE TRABAJOS DE IMPRESIÃ“N
+// PROCESAMIENTO DE TRABAJOS DE IMPRESION
 // ============================================================
 async function processJob(job) {
     const config = store.get('config');
@@ -594,7 +654,7 @@ async function renderHTMLToPDF(htmlContent, job) {
         // Esperar a que se carguen las fuentes e imágenes
         await page.evaluateHandle('document.fonts.ready');
 
-        // Detectar si es impresiÃ³n POS (tÃ©rmica)
+        // Detectar si es impresión POS (tÃ©rmica)
         // Se considera POS si el formato es '80mm', '58mm' o si el tipo es cocina/bar/ticket
         const jobType = (job.type || job.printer || '').toLowerCase();
         const format = (job.format || '').toLowerCase();
@@ -608,8 +668,8 @@ async function renderHTMLToPDF(htmlContent, job) {
         };
 
         if (isPos) {
-            // ConfiguraciÃ³n Ã³ptima para POS / TÃ©rmica
-            // 1. Calcular altura dinÃ¡mica basada en el contenido
+            // Configuración óptima para POS / TÃ©rmica
+            // 1. Calcular altura dinámica basada en el contenido
             const bodyHeight = await page.evaluate(() => {
                 // Agregar un pequeÃ±o padding para asegurar que no se corte
                 return document.body.scrollHeight + 50;
@@ -629,7 +689,7 @@ async function renderHTMLToPDF(htmlContent, job) {
 
             console.log(`[RENDER] Generando PDF POS: ${width} x ${bodyHeight}px`);
         } else {
-            // ConfiguraciÃ³n estÃ¡ndar A4/Letter
+            // Configuración estándar A4/Letter
             pdfOptions.format = (format && format !== 'a4') ? format : 'A4';
             pdfOptions.margin = {
                 top: '10mm',
