@@ -56,6 +56,9 @@ const MAX_POLLING_INTERVAL = 60000; // 60 seconds
 let consecutiveFailures = 0;
 const MAX_CONSECUTIVE_FAILURES = 5;
 
+// Startup Configuration
+const STARTUP_HIDDEN_FLAG = '--hidden';
+
 // ============================================================
 // INICIALIZACIÃ“N DE LA APLICACIÃ“N
 // ============================================================
@@ -84,7 +87,14 @@ async function createWindow() {
     }
 
     mainWindow.once('ready-to-show', () => {
-        mainWindow.show();
+        // Check if launched with hidden flag (from startup registry)
+        const isHidden = process.argv.includes(STARTUP_HIDDEN_FLAG);
+
+        if (!isHidden) {
+            mainWindow.show();
+        } else {
+            console.log('Iniciando minimizado (background mode)');
+        }
     });
 
     // Minimizar a bandeja en lugar de cerrar
@@ -235,6 +245,32 @@ ipcMain.handle('update-printer-mapping', async (event, mappings) => {
     config.printers = mappings;
     store.set('config', config);
     return { success: true };
+    return { success: true };
+});
+
+ipcMain.handle('get-startup-settings', async () => {
+    const loginSettings = app.getLoginItemSettings();
+    return {
+        openAtLogin: loginSettings.openAtLogin,
+        openAsHidden: loginSettings.args.includes(STARTUP_HIDDEN_FLAG)
+    };
+});
+
+ipcMain.handle('set-startup-settings', async (event, settings) => {
+    try {
+        const args = settings.openAsHidden ? [STARTUP_HIDDEN_FLAG] : [];
+
+        app.setLoginItemSettings({
+            openAtLogin: settings.openAtLogin,
+            openAsHidden: settings.openAsHidden, // MacOS support
+            args: args // Windows support (passed as CLI args)
+        });
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error setting startup options:', error);
+        return { success: false, error: error.message };
+    }
 });
 
 // ============================================================

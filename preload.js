@@ -22,6 +22,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getJobs: () => ipcRenderer.invoke('get-jobs'),
     retryJob: (jobId) => ipcRenderer.invoke('retry-job', jobId),
 
+    // Configuración de Inicio
+    getStartupSettings: () => ipcRenderer.invoke('get-startup-settings'),
+    setStartupSettings: (settings) => ipcRenderer.invoke('set-startup-settings', settings),
+
     // Listeners para eventos del main process
     onJobsUpdate: (callback) => {
         ipcRenderer.on('jobs-update', (event, jobs) => callback(jobs));

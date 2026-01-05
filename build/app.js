@@ -54,7 +54,11 @@ const elements = {
     testConnectionBtn: document.getElementById('testConnectionBtn'),
 
     // Toast
-    toastContainer: document.getElementById('toastContainer')
+    toastContainer: document.getElementById('toastContainer'),
+
+    // Startup Settings
+    openAtLoginInput: document.getElementById('openAtLogin'),
+    openAsHiddenInput: document.getElementById('openAsHidden')
 };
 
 // ============================================================
@@ -71,6 +75,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Load initial data
     await loadConfig();
+    await loadPrinters();
+    await loadStats();
+    await loadConfig();
+    await loadStartupSettings(); // Nuevo
     await loadPrinters();
     await loadStats();
     await loadJobs();
@@ -113,7 +121,16 @@ function setupEventListeners() {
     elements.saveMappingsBtn.addEventListener('click', handleSaveMappings);
 
     // Jobs
+    // Jobs
     elements.refreshJobsBtn.addEventListener('click', loadJobs);
+
+    // Startup Settings
+    if (elements.openAtLoginInput) {
+        elements.openAtLoginInput.addEventListener('change', handleStartupSettingChange);
+    }
+    if (elements.openAsHiddenInput) {
+        elements.openAsHiddenInput.addEventListener('change', handleStartupSettingChange);
+    }
 }
 
 // ============================================================
@@ -181,6 +198,43 @@ async function loadConfig() {
     } catch (error) {
         console.error('Error loading config:', error);
         showToast('Error al cargar la configuración', 'error');
+    }
+}
+
+
+async function loadStartupSettings() {
+    try {
+        if (!window.electronAPI) return;
+
+        const settings = await window.electronAPI.getStartupSettings();
+        if (settings) {
+            elements.openAtLoginInput.checked = settings.openAtLogin || false;
+            elements.openAsHiddenInput.checked = settings.openAsHidden || false;
+        }
+    } catch (error) {
+        console.error('Error loading startup settings:', error);
+    }
+}
+
+async function handleStartupSettingChange() {
+    try {
+        if (!window.electronAPI) return;
+
+        const settings = {
+            openAtLogin: elements.openAtLoginInput.checked,
+            openAsHidden: elements.openAsHiddenInput.checked
+        };
+
+        const result = await window.electronAPI.setStartupSettings(settings);
+
+        if (result.success) {
+            showToast('Configuración de inicio actualizada', 'success');
+        } else {
+            showToast('Error al actualizar configuración de inicio', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving startup settings:', error);
+        showToast('Error al guardar configuración de inicio', 'error');
     }
 }
 
