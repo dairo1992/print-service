@@ -289,10 +289,12 @@ ipcMain.handle('save-config', async (event, config) => {
 ipcMain.handle('clear-config', async () => {
     try {
         store.set('config', {}); // Reset to empty object
-        console.log('ConfiguraciÃ³n restablecida de fÃ¡brica');
+        store.set('jobs', []);   // Clear job history
+        store.set('stats', { pending: 0, processing: 0, completed: 0, failed: 0 }); // Reset counters
+        console.log('Configuración restablecida de fábrica (config, jobs, stats)');
         return { success: true };
     } catch (error) {
-        console.error('Error limpiando configuraciÃ³n:', error);
+        console.error('Error limpiando configuración:', error);
         return { success: false, error: error.message };
     }
 });
@@ -915,6 +917,41 @@ ipcMain.handle('get-stats', async () => {
 ipcMain.handle('get-jobs', async () => {
     // Retornar trabajos desde almacenamiento local
     return store.get('jobs') || [];
+});
+
+// Refrescar cola de impresión desde el servidor
+ipcMain.handle('refresh-print-queue', async () => {
+    const config = store.get('config');
+    if (!config || !config.clientId || !config.apiUrl) {
+        return { success: false, error: 'No hay configuración guardada' };
+    }
+
+    try {
+        const url = `${config.apiUrl}?action=pending`;
+        log('INFO', `[REFRESH] GET ${url}`);
+
+        const response = await axios.get(url, {
+            headers: { 'X-Client-Id': config.clientId },
+            timeout: 10000
+        });
+
+        const newJobs = response.data.jobs || response.data.pendientes || [];
+        updateLocalJobHistory(newJobs);
+        const allJobs = store.get('jobs') || [];
+
+        // Notificar al renderer y resetear backoff
+        if (mainWindow && mainWindow.webContents) {
+            mainWindow.webContents.send('jobs-update', allJobs);
+            mainWindow.webContents.send('connection-status', true);
+        }
+        adjustPollingInterval(true);
+
+        log('INFO', `[REFRESH] ${newJobs.length} trabajos pendientes encontrados`);
+        return { success: true, jobs: allJobs };
+    } catch (error) {
+        log('ERROR', `[REFRESH] Error: ${error.message}`);
+        return { success: false, error: error.message };
+    }
 });
 
 ipcMain.handle('retry-job', async (event, jobId) => {

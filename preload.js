@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Trabajos
     getStats: () => ipcRenderer.invoke('get-stats'),
     getJobs: () => ipcRenderer.invoke('get-jobs'),
+    refreshPrintQueue: () => ipcRenderer.invoke('refresh-print-queue'),
     retryJob: (jobId) => ipcRenderer.invoke('retry-job', jobId),
 
     // Configuración de Inicio

@@ -711,10 +711,20 @@ async function loadJobs() {
     try {
         if (!window.electronAPI) return;
 
-        const jobs = await window.electronAPI.getJobs();
-        state.jobs = jobs;
-        renderJobs();
-        updateStats();
+        // Intentar refrescar desde el servidor
+        const result = await window.electronAPI.refreshPrintQueue();
+        if (result.success) {
+            state.jobs = result.jobs;
+            renderJobs();
+            updateStats();
+        } else {
+            // Fallback: cargar desde almacenamiento local
+            console.warn('No se pudo refrescar desde servidor:', result.error);
+            const jobs = await window.electronAPI.getJobs();
+            state.jobs = jobs;
+            renderJobs();
+            updateStats();
+        }
     } catch (error) {
         console.error('Error loading jobs:', error);
     }
