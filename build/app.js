@@ -425,15 +425,39 @@ async function loadPrinters() {
     try {
         if (!window.electronAPI) return;
 
+        // Show loading state on button
+        if (elements.refreshPrintersBtn) {
+            elements.refreshPrintersBtn.disabled = true;
+            elements.refreshPrintersBtn.innerHTML = '<span class="loading-spinner"></span> Actualizando...';
+        }
+
+        // Clear the list and show loading state
+        elements.printersList.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🔍</div>
+                <p>Buscando impresoras...</p>
+            </div>
+        `;
+        state.printers = [];
+
+        // Fetch printers
         const printers = await window.electronAPI.getPrinters();
         state.printers = printers;
 
         renderPrintersList();
         updatePrinterSelects();
         loadPrinterMappings();
+
+        showToast(`Se encontraron ${printers.length} impresora(s)`, 'success');
     } catch (error) {
         console.error('Error loading printers:', error);
         showToast('Error al cargar impresoras', 'error');
+    } finally {
+        // Restore button state
+        if (elements.refreshPrintersBtn) {
+            elements.refreshPrintersBtn.disabled = false;
+            elements.refreshPrintersBtn.innerHTML = '🔄 Actualizar';
+        }
     }
 }
 
@@ -454,8 +478,8 @@ function renderPrintersList() {
                 <span class="printer-type-icon">${printer.isDefault ? '⭐' : '🖨️'}</span>
                 ${escapeHtml(printer.name)}
             </div>
-            <span class="job-status ${printer.status === 'ready' ? 'completed' : 'pending'}">
-                ${printer.status === 'ready' ? '✓ Listo' : '○ ' + printer.status}
+            <span class="job-status ${getStatusClass(printer.status)}">
+                ${getStatusIcon(printer.status)} ${getPrinterStatusLabel(printer.status)}
             </span>
         </div>
     `).join('');
@@ -823,6 +847,54 @@ function getStatusLabel(status) {
         failed: 'Fallido'
     };
     return labels[status] || status;
+}
+
+function getStatusClass(status) {
+    const classes = {
+        'ready': 'completed',
+        'printing': 'processing',
+        'processing': 'processing',
+        'busy': 'processing',
+        'active': 'processing',
+        'warming-up': 'processing',
+        'initializing': 'processing',
+        'paused': 'pending',
+        'waiting': 'pending',
+        'offline': 'failed',
+        'error': 'failed',
+        'paper-jam': 'failed',
+        'paper-out': 'failed',
+        'door-open': 'failed',
+        'no-toner': 'failed',
+        'out-of-memory': 'failed',
+        'unavailable': 'failed',
+        'attention-required': 'failed'
+    };
+    return classes[status] || 'pending';
+}
+
+function getPrinterStatusLabel(status) {
+    const labels = {
+        'ready': 'Listo',
+        'printing': 'Imprimiendo',
+        'processing': 'Procesando',
+        'busy': 'Ocupado',
+        'active': 'Activo',
+        'warming-up': 'Calentando',
+        'initializing': 'Iniciando',
+        'paused': 'Pausado',
+        'waiting': 'Esperando',
+        'offline': 'Sin conexión',
+        'error': 'Error',
+        'paper-jam': 'Atasco de papel',
+        'paper-out': 'Sin papel',
+        'door-open': 'Puerta abierta',
+        'no-toner': 'Sin tóner',
+        'out-of-memory': 'Sin memoria',
+        'unavailable': 'No disponible',
+        'attention-required': 'Requiere atención'
+    };
+    return labels[status] || status || 'Listo';
 }
 
 function escapeHtml(text) {

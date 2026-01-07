@@ -247,6 +247,10 @@ ipcMain.handle('save-config', async (event, config) => {
         });
 
         if (response.data.success) {
+            // Obtener configuración actual para preservar settings de inicio
+            const currentConfig = store.get('config') || {};
+            const startupSettings = currentConfig.startup || {};
+
             // Guardar configuración localmente
             store.set('config', {
                 clientId: config.clientId,
@@ -254,15 +258,18 @@ ipcMain.handle('save-config', async (event, config) => {
                 apiKey: config.apiKey,
                 token: response.data.token,
                 printers: response.data.printers || [],
-                // Preserve startup settings if any (or reset them? User said "reset to default")
-                // User said "limpiar toda las configuraciones del storage a default es decir todo en blanco"
-                // So strict reset is fine. But wait, if they clear config, startup settings might be lost too?
-                // Let's assume clear config clears EVERYTHING including startup preference.
-                // But we should probably preserve startup preference if we implemented it separately?
-                // No, clear ALL.
+                startup: startupSettings // Preservar opciones de inicio
             });
 
-            // ...
+            // Inicializar sistema de impresión (no bloqueante)
+            initializePrintSystem().catch(err => {
+                log('ERROR', `Error inicializando sistema de impresión: ${err.message}`);
+                if (mainWindow && mainWindow.webContents) {
+                    mainWindow.webContents.send('print-system-error', {
+                        message: 'Error al inicializar el sistema de impresión. Ejecuta: npx puppeteer browsers install chrome'
+                    });
+                }
+            });
 
             return { success: true, data: response.data };
         } else {
@@ -349,8 +356,23 @@ ipcMain.handle('set-startup-settings', async (event, settings) => {
 // ============================================================
 ipcMain.handle('get-printers', async () => {
     try {
-        const printers = await printer.getPrinters();
+        // Priorizar la API nativa de Electron si hay una ventana disponible
+        // Esto garantiza ver TODAS las impresoras que ve el sistema (Red, USB, WiFi, etc.)
+        if (mainWindow && mainWindow.webContents) {
+            const printers = await mainWindow.webContents.getPrintersAsync();
+            console.log('DEBUG: Raw printers from Electron:', JSON.stringify(printers, null, 2));
+            return printers.map(p => ({
+                name: p.name,
+                deviceId: p.name, // Electron usa 'name' como identificador
+                status: parsePrinterStatus(p.status), // Use helper to parse status code
+                isDefault: p.isDefault,
+                options: p.options // Include options if useful
+            }));
+        }
 
+        // Fallback a pdf-to-printer si no hay ventana (edge case)
+        console.warn('MainWindow no disponible, usando fallback pdf-to-printer');
+        const printers = await printer.getPrinters();
         return printers.map(p => ({
             name: p.name || p.deviceId,
             deviceId: p.deviceId,
@@ -362,6 +384,69 @@ ipcMain.handle('get-printers', async () => {
         return [];
     }
 });
+
+/**
+ * Parsea el código de estado de la impresora (Windows bitmask)
+ * @param {number} status 
+ * @returns {string} Estado legible
+ */
+function parsePrinterStatus(status) {
+    // Handle undefined, null, or 0 as 'ready'
+    if (status === undefined || status === null || status === 0) return 'ready';
+
+    // Windows Printer Status Constants (Bitmask)
+    // https://docs.microsoft.com/en-us/windows/win32/printdocs/printer-info-2
+    const PRINTER_STATUS = {
+        PAUSED: 0x00000001,
+        ERROR: 0x00000002,
+        PENDING_DELETION: 0x00000004,
+        PAPER_JAM: 0x00000008,
+        PAPER_OUT: 0x00000010,
+        MANUAL_FEED: 0x00000020,
+        PAPER_PROBLEM: 0x00000040,
+        OFFLINE: 0x00000080,
+        IO_ACTIVE: 0x00000100,
+        BUSY: 0x00000200,
+        PRINTING: 0x00000400,
+        OUTPUT_BIN_FULL: 0x00000800,
+        NOT_AVAILABLE: 0x00001000,
+        WAITING: 0x00002000,
+        PROCESSING: 0x00004000,
+        INITIALIZING: 0x00008000,
+        WARMING_UP: 0x00010000,
+        TONER_LOW: 0x00020000,
+        NO_TONER: 0x00040000,
+        PAGE_PUNT: 0x00080000,
+        USER_INTERVENTION: 0x00100000,
+        OUT_OF_MEMORY: 0x00200000,
+        DOOR_OPEN: 0x00400000,
+        SERVER_UNKNOWN: 0x00800000,
+        POWER_SAVE: 0x01000000
+    };
+
+    // Prioridad de estados para mostrar al usuario (el más severo gana)
+    if (status & PRINTER_STATUS.ERROR) return 'error';
+    if (status & PRINTER_STATUS.OFFLINE) return 'offline';
+    if (status & PRINTER_STATUS.PAPER_JAM) return 'paper-jam';
+    if (status & PRINTER_STATUS.PAPER_OUT) return 'paper-out';
+    if (status & PRINTER_STATUS.DOOR_OPEN) return 'door-open';
+    if (status & PRINTER_STATUS.NO_TONER) return 'no-toner';
+    if (status & PRINTER_STATUS.OUT_OF_MEMORY) return 'out-of-memory';
+    if (status & PRINTER_STATUS.NOT_AVAILABLE) return 'unavailable';
+    if (status & PRINTER_STATUS.USER_INTERVENTION) return 'attention-required';
+
+    // Estados transitorios o informativos
+    if (status & PRINTER_STATUS.PAUSED) return 'paused';
+    if (status & PRINTER_STATUS.PRINTING) return 'printing';
+    if (status & PRINTER_STATUS.PROCESSING) return 'processing';
+    if (status & PRINTER_STATUS.BUSY) return 'busy';
+    if (status & PRINTER_STATUS.WARMING_UP) return 'warming-up';
+    if (status & PRINTER_STATUS.INITIALIZING) return 'initializing';
+    if (status & PRINTER_STATUS.IO_ACTIVE) return 'active';
+
+    // Si tiene status pero no encaja en los anteriores
+    return `unknown (${status})`;
+}
 
 // ============================================================
 // SISTEMA DE POLLING Y PROCESAMIENTO DE TRABAJOS
