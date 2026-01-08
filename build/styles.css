@@ -16,7 +16,7 @@
     /* Darker purple on hover */
 
     /* Text */
-    --text-primary: #ffffff;
+    --text-primary: #ffc907;
     --text-dark: #1a1a2e;
     /* Dark text for light background */
     --text-secondary: #a0a0b0;
@@ -174,7 +174,9 @@ body {
     /* Yellow 'G' */
 }
 
-
+.status-text {
+    color: var(--text-primary);
+}
 
 .connection-status {
     display: flex;
@@ -644,6 +646,7 @@ body {
 .btn-secondary {
     background: var(--bg-tertiary);
     color: var(--text-primary);
+    font-weight: 600;
     border: 1px solid var(--border-color);
 }
 

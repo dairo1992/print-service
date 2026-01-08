@@ -68,7 +68,7 @@ async function createWindow() {
         height: 800,
         minWidth: 900,
         minHeight: 600,
-        icon: path.join(__dirname, 'assets/gavi_isotipo_blanco.png'),
+        icon: path.join(__dirname, 'assets/gavi_logo.png'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -126,7 +126,7 @@ async function createWindow() {
 
 function createTray() {
     // Esto asegura que la ruta sea correcta sin importar desde dónde se ejecute el proceso
-    const iconPath = path.join(__dirname, 'assets', 'gavi_isotipo_blanco.png');
+    const iconPath = path.join(__dirname, 'assets', 'gavi_logo.png');
     const icon = nativeImage.createFromPath(iconPath);
 
     // Verifica si el icono es válido antes de crear el Tray
