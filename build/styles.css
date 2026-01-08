@@ -5,14 +5,20 @@
 /* CSS Variables - Design System */
 :root {
     /* Colors */
-    --bg-primary: #0f0f1a;
-    --bg-secondary: #1a1a2e;
-    --bg-tertiary: #252540;
-    --bg-card: rgba(30, 30, 50, 0.8);
-    --bg-card-hover: rgba(40, 40, 65, 0.9);
+
+    --bg-primary: #ffffff;
+    /* White background */
+    --bg-secondary: #f5f5f7;
+    --bg-tertiary: #e0e0e0;
+    --bg-card: var(--accent-primary);
+    /* Purple cards */
+    --bg-card-hover: #5b32a8;
+    /* Darker purple on hover */
 
     /* Text */
     --text-primary: #ffffff;
+    --text-dark: #1a1a2e;
+    /* Dark text for light background */
     --text-secondary: #a0a0b0;
     --text-muted: #6b6b80;
 
@@ -72,7 +78,9 @@ body {
     font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
     font-size: 14px;
     line-height: 1.6;
-    color: var(--text-primary);
+    line-height: 1.6;
+    color: var(--text-dark);
+    /* Default text color for white background */
     background: var(--bg-primary);
     overflow: hidden;
 }
@@ -253,7 +261,7 @@ body {
 .nav-item.active {
     background: var(--accent-secondary);
     /* Secondary Color (Yellow) */
-    color: var(--bg-primary);
+    color: var(--text-dark);
     /* Dark text for contrast against yellow */
     box-shadow: var(--shadow-sm);
     font-weight: 600;
@@ -347,7 +355,8 @@ body {
 
 .stat-label {
     font-size: 0.875rem;
-    color: var(--text-secondary);
+    color: var(--accent-secondary);
+    /* Yellow label as requested */
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: var(--spacing-sm);
@@ -387,7 +396,9 @@ body {
    ============================================================ */
 .card {
     background: var(--bg-card);
-    border: 1px solid var(--border-color);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--accent-secondary);
+    /* White text inside purple cards */
     border-radius: var(--radius-lg);
     backdrop-filter: blur(20px);
     overflow: hidden;
@@ -416,6 +427,20 @@ body {
 /* ============================================================
    Job Queue
    ============================================================ */
+.job-header {
+    display: grid;
+    grid-template-columns: 80px 1fr 1fr 120px 50px;
+    /* Same grid as job-item */
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--accent-secondary);
+    /* Title color as requested */
+    font-weight: 700;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+}
+
 .job-list {
     display: flex;
     flex-direction: column;
@@ -430,19 +455,33 @@ body {
     align-items: center;
     gap: var(--spacing-md);
     padding: var(--spacing-md);
-    background: var(--bg-tertiary);
+    background: var(--bg-card-hover);
+    /* Dark Purple default */
     border-radius: var(--radius-md);
     transition: var(--transition-normal);
+    color: #ffffff;
+    /* Default text white */
 }
 
 .job-item:hover {
-    background: var(--bg-card-hover);
+    background: var(--bg-tertiary);
+    /* Light Gray hover */
+    color: var(--text-dark);
+    /* Dark text on light background */
+}
+
+/* Ensure secondary accent items remain readable or adjust on hover */
+.job-item:hover .job-id,
+.job-item:hover .job-printer {
+    color: var(--accent-primary);
+    /* Switch to purple text on light hover */
 }
 
 .job-id {
     font-family: 'Fira Code', monospace;
     font-size: 0.875rem;
-    color: var(--accent-primary);
+    color: var(--accent-secondary);
+    /* Yellow job ID */
 }
 
 .job-type {
@@ -450,7 +489,8 @@ body {
 }
 
 .job-printer {
-    color: var(--text-secondary);
+    color: var(--accent-secondary);
+    /* Yellow printer name */
     font-size: 0.875rem;
 }
 
@@ -542,7 +582,7 @@ body {
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    color: var(--text-primary);
+    color: var(--accent-primary);
     font-size: 0.9375rem;
     transition: var(--transition-normal);
 }
@@ -817,13 +857,18 @@ body {
 
 .section-title {
     font-size: 1.5rem;
+    color: var(--accent-primary);
+    /* Primary color for title */
     font-weight: 700;
-    margin-bottom: var(--spacing-sm);
 }
 
 .section-subtitle {
-    color: var(--text-secondary);
+    color: var(--accent-primary);
+    /* Primary color for subtitle */
+    opacity: 0.8;
 }
+
+
 
 /* Config Status Badge */
 .config-status {
